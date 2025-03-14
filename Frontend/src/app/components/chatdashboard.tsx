@@ -42,7 +42,7 @@ export const Chat = () => {
         },
         body: JSON.stringify({
           query,
-          file_name: "all",
+          file_name: currentChatingFile || "all",
           socketId,
         }),
       });

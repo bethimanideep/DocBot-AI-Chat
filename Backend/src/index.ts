@@ -380,13 +380,14 @@ app.post(
       if (!files || files.length === 0) {
         return res.status(400).json({ message: "No files uploaded." });
       }
+
       io.emit("progressbar", 50);
 
-      // Initialize the user's vector store object if it doesn't exist
+      // Initialize the user's retriever storage if not present
       if (!userRetrievers[socketId]) {
         userRetrievers[socketId] = {};
       }
-      const fileList: any = [];
+
       for (const file of files) {
         if (file.mimetype !== "application/pdf") {
           console.log(`Skipping non-PDF file: ${file.originalname}`);
@@ -399,6 +400,7 @@ app.post(
         console.log({ FileName: file.originalname, Chunks: chunks.length });
 
         io.emit("progressbar", 75);
+
         // Embed all chunks in one API call
         const embeddingsArray = await embeddings.embedDocuments(chunks);
 
@@ -410,33 +412,40 @@ app.post(
 
         // Initialize or update the vector store for the file
         if (!userRetrievers[socketId][file.originalname]) {
-          userRetrievers[socketId][file.originalname] = new MemoryVectorStore(
-            embeddings
-          );
+          userRetrievers[socketId][file.originalname] = {
+            vectorStore: new MemoryVectorStore(embeddings),
+            mimeType: file.mimetype, // Store mimeType
+            fileSize: file.size, // Store fileSize
+          };
         }
 
         // Add documents to the vector store
-        await userRetrievers[socketId][file.originalname].addVectors(
+        await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
           embeddingsArray,
           documents
-        ); 
-        
-        fileList.push({ filename: file.originalname ,fileSize: file.size,mimeType: file.mimetype,});
+        );
       }
+
       io.emit("progressbar", 100);
 
-      res
-        .status(200)
-        .json({
-          message: "Files uploaded and processed successfully.",
-          fileList,
-        });
+      // Retrieve stored files related to the user (socketId) with mimeType and fileSize
+      const userFiles = Object.keys(userRetrievers[socketId]).map((filename) => ({
+        filename,
+        mimeType: userRetrievers[socketId][filename].mimeType,
+        fileSize: userRetrievers[socketId][filename].fileSize,
+      }));
+
+      res.status(200).json({
+        message: "Files uploaded and processed successfully.",
+        fileList: userFiles,
+      });
     } catch (error) {
       console.error("Error processing files:", error);
       res.status(500).json({ message: "Error processing files." });
     }
   }
 );
+
 
 app.post("/chat", async (req: any, res: any) => {
   try {
@@ -457,22 +466,34 @@ app.post("/chat", async (req: any, res: any) => {
       return res.status(400).json({ error: "Upload files first." });
     }
 
+    // Extract the files from userRetrievers
+    const userFiles = userRetrievers[socketId];
+
     // Validate if specific file exists when file_name is not "all"
-    if (file_name !== "all" && !userRetrievers[socketId][file_name]) {
+    if (file_name !== "Local Files" && !userFiles[file_name]) {
       console.log(
         `File not found for socketId: ${socketId}, file: ${file_name}`
       );
       return res.status(400).json({ error: "File not found." });
     }
 
-    // Define retriever based on file_name
     let retriever;
-    if (file_name === "all") {
+
+    if (file_name === "Local Files") {
+      console.log("Querying all retrievers...");
+      
+      const vectorStores = Object.values(userFiles)
+        .map((fileData: any) => fileData.vectorStore) // Extract vector store
+        .filter((store) => store); // Remove undefined stores
+
+      if (vectorStores.length === 0) {
+        return res.status(400).json({ error: "No stored vector files found." });
+      }
+
       retriever = {
         async getRelevantDocuments(query: any) {
-          console.log("Querying all retrievers...");
           const results = await Promise.all(
-            Object.values(userRetrievers[socketId]).map((store: any) =>
+            vectorStores.map((store: any) =>
               store.asRetriever({ k: 1 }).getRelevantDocuments(query)
             )
           );
@@ -480,7 +501,7 @@ app.post("/chat", async (req: any, res: any) => {
         },
       };
     } else {
-      retriever = userRetrievers[socketId][file_name].asRetriever({ k: 1 });
+      retriever = userFiles[file_name].vectorStore.asRetriever({ k: 1 });
     }
 
     console.log("Retriever ready, running query...");
@@ -496,6 +517,7 @@ app.post("/chat", async (req: any, res: any) => {
     res.status(500).json({ message: "Server error." });
   }
 });
+
 
 app.get("/", (req, res) => {
   console.log(req.cookies);

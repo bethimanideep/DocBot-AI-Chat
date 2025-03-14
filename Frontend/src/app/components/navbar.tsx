@@ -26,6 +26,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "./reduxtoolkit/store";
 import Upload from "./upload";
 import { Progress } from "@/components/ui/progress";
+import { AdjustableFileSidebar } from "./AdjustableFileSidebar";
 import { FileSidebar } from "./fileSidebar";
 
 export default function Navbar() {
@@ -64,11 +65,9 @@ export default function Navbar() {
               <span className="sr-only">Toggle file sidebar</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-72">
-            <SheetHeader>
-              <SheetTitle></SheetTitle>
-              <SheetDescription></SheetDescription>
-            </SheetHeader>
+          <SheetContent side="left" className="p-0">
+            <SheetDescription></SheetDescription>
+            <SheetTitle></SheetTitle>
             <FileSidebar />
           </SheetContent>
         </Sheet>

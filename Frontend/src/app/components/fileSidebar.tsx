@@ -96,10 +96,10 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)]">
+    <div className="h-full w-[300px]">
       <div
         ref={sidebarRef}
-        className="bg-white dark:bg-[#0a0a0a] border-r border-gray-200 dark:border-gray-700 shadow-xl relative"
+        className="h-full bg-white dark:bg-[#0a0a0a] border-r border-gray-200 dark:border-gray-700 shadow-xl relative"
         style={{ width: `${sidebarWidth.current}px`, transition: "none" }}
       >
         {/* Header */}
@@ -123,7 +123,18 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                   <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 )}
               </div>
-              <span className="font-semibold text-gray-700 dark:text-gray-200">Local Files</span>
+              <div className="flex items-center justify-between flex-1">
+                <span className="font-semibold text-gray-700 dark:text-gray-200">Local Files</span>
+                <button
+                  className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch(setCurrentChatingFile("Local Files"));
+                  }}
+                >
+                  Chat
+                </button>
+              </div>
             </div>
 
             <div
@@ -181,7 +192,18 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                   <ChevronRight className="w-4 h-4 text-green-600 dark:text-green-400" />
                 )}
               </div>
-              <span className="font-semibold text-gray-700 dark:text-gray-200">Google Drive</span>
+              <div className="flex items-center justify-between flex-1">
+                <span className="font-semibold text-gray-700 dark:text-gray-200">Google Drive</span>
+                <button
+                  className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-full hover:bg-green-700 transition-colors duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch(setCurrentChatingFile("Google Drive"));
+                  }}
+                >
+                  Chat
+                </button>
+              </div>
             </div>
             <div
               className={cn(
@@ -211,7 +233,18 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                   <ChevronRight className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 )}
               </div>
-              <span className="font-semibold text-gray-700 dark:text-gray-200">Box Files</span>
+              <div className="flex items-center justify-between flex-1">
+                <span className="font-semibold text-gray-700 dark:text-gray-200">Box</span>
+                <button
+                  className="px-3 py-1 text-xs font-medium text-white bg-purple-600 rounded-full hover:bg-purple-700 transition-colors duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch(setCurrentChatingFile("Box"));
+                  }}
+                >
+                  Chat
+                </button>
+              </div>
             </div>
             <div
               className={cn(
