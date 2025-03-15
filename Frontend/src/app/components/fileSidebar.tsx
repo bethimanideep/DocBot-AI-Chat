@@ -142,7 +142,12 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
               expandedSections["local"] ? "max-h-[full]" : "max-h-0"
             )}
           >
-            <ScrollArea className="h-[500px]">
+            <div
+  className={cn(
+    "overflow-y-auto transition-all duration-200", // Enable native scrollbar
+    expandedSections["local"] ? "max-h-[500px]" : "max-h-0" // Adjust height dynamically
+  )}
+>
             {uploadedFiles.length > 0 ? (
               <div className="space-y-1 p-2">
                 {uploadedFiles.map((file: any, i: number) => (
@@ -179,7 +184,8 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                 <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">Upload files to get started</div>
               </div>
             )}
-            </ScrollArea>
+          </div>
+          
           </div>
         </div>
 
