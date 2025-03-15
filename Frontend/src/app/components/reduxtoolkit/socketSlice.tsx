@@ -4,10 +4,11 @@ interface SocketState {
   socketId: string | null;
   username: string | null;
   userId: string | null;
-  uploadedFiles: { filename: string }[];
+  uploadedFiles: any;
   isLoading: boolean;
   progress: number;
   currentChatingFile: string | null; // New state for selected file
+  fileId: string | null; // New state for selected file
 }
 
 const initialState: SocketState = {
@@ -18,6 +19,7 @@ const initialState: SocketState = {
   isLoading: false,
   progress: 0,
   currentChatingFile: null, // Default null
+  fileId: null, // Default null
 };
 
 const socketSlice = createSlice({
@@ -33,7 +35,7 @@ const socketSlice = createSlice({
     setUserId: (state, action: PayloadAction<string | null>) => {
       state.userId = action.payload;
     },
-    setUploadedFiles: (state, action: PayloadAction<{ filename: string }[]>) => {
+    setUploadedFiles: (state, action: any) => {
       state.uploadedFiles = action.payload;
       state.isLoading = false;
       state.progress = 100;
@@ -47,9 +49,12 @@ const socketSlice = createSlice({
     setCurrentChatingFile: (state, action: PayloadAction<string | null>) => {
       state.currentChatingFile = action.payload;
     },
+    setFileId: (state, action: PayloadAction<string | null>) => {
+      state.fileId = action.payload;
+    },
   },
 });
 
-export const { setSocketId, setUsername, setUploadedFiles, setIsLoading, setProgress, setUserId, setCurrentChatingFile } =
+export const { setSocketId, setUsername, setUploadedFiles, setIsLoading, setProgress, setUserId, setCurrentChatingFile, setFileId } =
   socketSlice.actions;
 export default socketSlice.reducer;

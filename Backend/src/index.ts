@@ -147,6 +147,8 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
             timestamp: new Date().toISOString(),
             chunk_index: i,
             text: chunks[i],
+            userId,
+            Local: "Local"
           },
           vector: embeddingsArray[i],
         });
@@ -226,6 +228,188 @@ app.post("/search", async (req: any, res: any) => {
     res.status(500).json({ message: "Error searching Pinecone" });
   }
 });
+
+app.post("/userlocalfiles", async (req: any, res: any) => {
+  try {
+    const { query, userId } = req.body; // Get user query
+
+    if (!query || !userId) {
+      return res.status(400).json({ message: "Query and userId are required" });
+    }
+
+    const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
+      client: weaviateClient, // Weaviate client instance
+      indexName: "Cwd", // Weaviate class name
+      metadataKeys: ["file_name", "fileId", "timestamp"], // Metadata to retrieve
+      textKey: "text" // The property in Weaviate that contains the text
+    });
+
+    // Apply filtering inside the retriever
+    const retriever = vectorStore.asRetriever({
+      k: 1, // Set the number of documents to return
+      filter: {
+        where: {
+          operator: "And",
+          operands: [
+            { path: ["userId"], operator: "Equal", valueText: userId },
+            { path: ["local"], operator: "Equal", valueText: "Local" }
+          ]
+        }
+      }
+    });
+
+    // Create RetrievalQAChain
+    const chain = RetrievalQAChain.fromLLM(llm, retriever, {
+      returnSourceDocuments: true,
+    });
+
+    // Ask the question and get a response
+    const response = await chain.call({
+      query: query,
+    });
+
+    res.status(200).json({
+      answer: response.text || "No answer found",
+    });
+  } catch (error) {
+    console.error("Search error:", error);
+    res.status(500).json({ message: "Error searching Weaviate" });
+  }
+});
+
+app.post("/userfilechat", async (req: any, res: any) => {
+  try {
+    const { query, fileId } = req.body; // Get user query and fileId
+
+    if (!query || !fileId) {
+      return res.status(400).json({ message: "Query and fileId are required" });
+    }
+
+    const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
+      client: weaviateClient, // Weaviate client instance
+      indexName: "Cwd", // Weaviate class name
+      metadataKeys: ["file_name", "fileId", "timestamp"], // Metadata to retrieve
+      textKey: "text" // The property in Weaviate that contains the text
+    });
+
+    // Apply filtering inside the retriever
+    const retriever = vectorStore.asRetriever({
+      k: 1, // Set the number of documents to return
+      filter: {
+        where: {
+          operator: "And",
+          operands: [
+            { path: ["fileId"], operator: "Equal", valueText: fileId }
+          ]
+        }
+      }
+    });
+
+    // Create RetrievalQAChain
+    const chain = RetrievalQAChain.fromLLM(llm, retriever, {
+      returnSourceDocuments: true,
+    });
+
+    // Ask the question and get a response
+    const response = await chain.call({
+      query: query,
+    });
+    console.log(response.text);
+    console.log(response.sourceDocuments);
+    
+    
+    res.status(200).json({
+      answer: response.text || "No answer found",
+    });
+  } catch (error) {
+    console.error("Search error:", error);
+    res.status(500).json({ message: "Error searching Weaviate" });
+  }
+});
+
+const userFileChatMemory: any = {}; // Store user files in memory
+
+app.post("/userfilechatmemory", async (req: any, res: any) => {
+  try {
+    const { userId, fileId, query } = req.body;
+
+    if (!userId || !fileId || !query) {
+      return res.status(400).json({ error: "userId, fileId, and query are required." });
+    }
+
+    // Initialize user storage if not present
+    if (!userRetrievers[userId]) {
+      userRetrievers[userId] = {};
+    }
+
+    // Check if vector store exists for the given fileId
+    if (!userRetrievers[userId][fileId]) {
+      console.log(`Fetching embeddings from Weaviate for fileId: ${fileId}`);
+
+      // Fetch embeddings for the specific fileId from Weaviate
+      const result = await weaviateClient.graphql
+        .get()
+        .withClassName("Cwd") // Replace with your actual class name
+        .withFields(`
+          userId
+          file_name
+          fileId
+          chunk_index
+          text
+          _additional { vector }
+        `)
+        .withWhere({
+          path: ["fileId"],
+          operator: "Equal",
+          valueText: fileId,
+        })
+        .do();
+
+      const documents = result.data.Get.Cwd;
+      if (!documents || documents.length === 0) {
+        return res.status(404).json({ error: "No embeddings found for this fileId." });
+      }
+
+      // Prepare documents with metadata
+      const fileName = documents[0].file_name;
+      const vectors = documents.map((doc: any) => ({
+        pageContent: doc.text,
+        metadata: { file_name: doc.file_name, chunk_index: doc.chunk_index },
+      }));
+      const embeddingsArray = documents.map((doc: any) => doc._additional.vector);
+
+      // Initialize or update the vector store
+      if (!userRetrievers[userId][fileId]) {
+        userRetrievers[userId][fileId] = {
+          vectorStore: new MemoryVectorStore(embeddings),
+          fileName: fileName, // Store fileName
+          fileId: fileId, // Store fileId
+        };
+      }
+
+      // Add documents to the vector store
+      await userRetrievers[userId][fileId].vectorStore.addVectors(embeddingsArray, vectors);
+    }
+
+    // Retrieve stored vector store
+    const retriever = userRetrievers[userId][fileId].vectorStore.asRetriever({ k: 1 });
+
+    console.log("Running query on vector store...");
+    const chain = RetrievalQAChain.fromLLM(llm, retriever);
+    const response = await chain.call({ query });
+
+    console.log("Response:", response);
+    res.status(200).json({ answer: response.text || "No answer found." });
+
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ message: "Server error." });
+  }
+});
+
+
+
+
 
 app.post("/searchbyfile", async (req: any, res: any) => {
   try {
@@ -322,6 +506,8 @@ app.get("/createIndex", async (req: any, res: any) => {
           vectorizer: "none", // Since we use precomputed embeddings
           vectorIndexType: "hnsw",
           properties: [
+            { name: "local", dataType: ["string"] },
+            { name: "userId", dataType: ["string"] },
             { name: "fileId", dataType: ["string"] }, // Add fileId to link with MongoDB
             { name: "file_name", dataType: ["string"] },
             { name: "timestamp", dataType: ["date"] },
@@ -349,6 +535,8 @@ app.get("/getAllData", async (req: any, res: any) => {
       .withClassName("Cwd") // Replace with your actual class name
       .withFields(
         `
+    local
+    userId
     file_name 
     fileId
     timestamp 
@@ -429,7 +617,8 @@ app.post(
       io.emit("progressbar", 100);
 
       // Retrieve stored files related to the user (socketId) with mimeType and fileSize
-      const userFiles = Object.keys(userRetrievers[socketId]).map((filename) => ({
+      const userFiles = Object.keys(userRetrievers[socketId]).map((filename, index) => ({
+        _id: index,
         filename,
         mimeType: userRetrievers[socketId][filename].mimeType,
         fileSize: userRetrievers[socketId][filename].fileSize,

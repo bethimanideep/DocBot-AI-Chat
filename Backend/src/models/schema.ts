@@ -19,15 +19,14 @@ const userFileSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     filename: { type: String, required: true },
     fileSize: { type: Number, required: true }, // In bytes
-    mimeType: { type: String, required: true, default: 'application/pdf' },
-    uploadedAt: { type: Date, default: Date.now },
+    mimeType: { type: String, required: true, default: 'application/pdf' }
   },
   {
     timestamps: true,
   }
 );
 
-const UserFile = mongoose.model('UserFile', userFileSchema);
+const UserFile = mongoose.model('LocalFile', userFileSchema);
 const User = mongoose.model('User', userSchema);
 
 export { User ,UserFile};

@@ -17,17 +17,17 @@ export default function Home() {
   );
 
   return (
-    <main className="h-screen overflow-hidden">
+    <main className="flex flex-col h-screen">
       <Navbar />
-      <div className="h-[calc(100vh-64px)] overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
         {!username && uploadedFiles.length === 0 ? (
           <Welcome />
         ) : (
-          <div className="flex h-full">
+          <div className="flex flex-1">
             <div className="hidden lg:block">
-            <FileSidebar />
+              <FileSidebar />
             </div>
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-hidden">
               <Chat />
             </div>
           </div>

@@ -14,10 +14,15 @@ interface Message {
 
 export const Chat = () => {
   const [mounted, setMounted] = useState(false);
-  const socketId = useSelector((state: RootState) => state.socket.socketId);
-  const currentChatingFile = useSelector(
-    (state: RootState) => state.socket.currentChatingFile
+  // const socketId = useSelector((state: RootState) => state.socket.socketId);
+  // const fileId = useSelector((state: RootState) => state.socket.fileId); // Add fileId from Redux
+  // const userId = useSelector((state: RootState) => state.socket.userId); // Add userId from Redux
+  const { userId, socketId, fileId, currentChatingFile } = useSelector(
+    (state: RootState) => state.socket
   );
+  // const currentChatingFile = useSelector(
+  //   (state: RootState) => state.socket.currentChatingFile
+  // );
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
@@ -35,19 +40,45 @@ export const Chat = () => {
 
   const sendMessageToBackend = async (query: string) => {
     try {
-      const response = await fetch("http://localhost:4000/chat", {
+      let url: string;
+      let body: any;
+
+      if (!userId) {
+        // Case 1: userId is null
+        url = "http://localhost:4000/chat";
+        body = {
+          query,
+          file_name: currentChatingFile || "Local Files",
+          socketId,
+        };
+      } else {
+        // Case 2: userId is not null
+        if (currentChatingFile === "Local Files") {
+          url = "http://localhost:4000/userlocalfiles";
+          body = {
+            query,
+            userId,
+          };
+        } else {
+          url = "http://localhost:4000/userfilechat";
+          body = {
+            query,
+            userId,
+            fileId: fileId, // Assuming currentChatingFile is the fileId
+          };
+        }
+      }
+
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          query,
-          file_name: currentChatingFile || "all",
-          socketId,
-        }),
+        body: JSON.stringify(body),
       });
+
       const data = await response.json();
-      console.log("Login Response:", data);
+      console.log("Backend Response:", data);
 
       if (response.ok) {
         return data;

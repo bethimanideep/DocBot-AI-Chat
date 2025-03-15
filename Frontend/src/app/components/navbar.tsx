@@ -45,7 +45,7 @@ export default function Navbar() {
       if (response.ok) {
         console.log(data);
         dispatch(setUsername(null));
-        dispatch(setUploadedFiles([]));
+        dispatch(setUploadedFiles([]as any));
         dispatch(setUserId(null));
         // router.push("/login"); // Redirect to login page after logout
       } else {
