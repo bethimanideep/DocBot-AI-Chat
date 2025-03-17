@@ -8,7 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { RootState } from "./reduxtoolkit/store";
-import { setSocketId, setUploadedFiles ,setProgress,setIsLoading} from "./reduxtoolkit/socketSlice";
+import { setSocketId, setUploadedFiles ,setProgress,setIsLoading, setSocketInstance} from "./reduxtoolkit/socketSlice";
+import { setDriveFiles } from "./reduxtoolkit/driveSlice";
 
 const Upload = () => {
   const dispatch = useDispatch();
@@ -19,8 +20,7 @@ const Upload = () => {
   ? `http://localhost:4000/upload?userId=${userId}` 
   : `http://localhost:4000/myuserupload?socketId=${socketId}`;
   useEffect(() => {
-    const newSocket: any = io("http://localhost:4000");
-
+    const newSocket: any = io("http://localhost:4000",{withCredentials:true});
     newSocket.on("connect", () => {
       dispatch(setSocketId(newSocket.id));
       console.log("Connected with socket ID:", newSocket.id);
@@ -30,6 +30,25 @@ const Upload = () => {
       console.log(message);
       dispatch(setProgress(message));
     });
+    newSocket.on("driveFilesResponse", (data: any) => {
+      if (data.error) {
+        console.log(data.error);
+        
+      } else {
+        dispatch(setDriveFiles(data.pdfFiles));
+        console.log("Received drive files:", data.pdfFiles);
+      }
+    });
+     // Listen for initial file list after connecting
+  newSocket.on("initialFileList", (data: any) => {
+    if (data.error) {
+      console.log("Error fetching initial files:", data.error);
+    } else {
+      dispatch(setUploadedFiles(data.fileList));
+      console.log("Received initial file list:", data.fileList);
+    }
+  });
+    
 
     return () => {
       newSocket.disconnect();

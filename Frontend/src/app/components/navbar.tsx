@@ -28,6 +28,7 @@ import Upload from "./upload";
 import { Progress } from "@/components/ui/progress";
 import { AdjustableFileSidebar } from "./AdjustableFileSidebar";
 import { FileSidebar } from "./fileSidebar";
+import { setDriveFiles } from "./reduxtoolkit/driveSlice";
 
 export default function Navbar() {
   const username = useSelector((state: RootState) => state.socket.username);
@@ -47,7 +48,7 @@ export default function Navbar() {
         dispatch(setUsername(null));
         dispatch(setUploadedFiles([]as any));
         dispatch(setUserId(null));
-        // router.push("/login"); // Redirect to login page after logout
+        dispatch(setDriveFiles([]as any));
       } else {
         console.error("Logout failed");
       }

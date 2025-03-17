@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -12,6 +12,12 @@ import { useDispatch, useSelector } from "react-redux";
 import { Chat } from "./chatdashboard";
 import { setCurrentChatingFile, setFileId } from "./reduxtoolkit/socketSlice";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  setDriveFiles,
+  setDriveLoading,
+  setDriveError,
+} from "./reduxtoolkit/driveSlice";
+import { showToast } from "@/lib/toast";
 
 interface FileData {
   _id: string;
@@ -33,6 +39,8 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
   const uploadedFiles = useSelector(
     (state: RootState) => state.socket.uploadedFiles
   );
+  const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
+  const isLoading = useSelector((state: RootState) => state.drive.isLoading);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -40,6 +48,37 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
   const currentX = useRef(0);
   const sidebarWidth = useRef(300);
 
+
+ const fetchDriveFiles = async () => {
+    try {
+      dispatch(setDriveLoading(true));
+
+      // Fetch PDF files from Google Drive
+      const response = await fetch("http://localhost:4000/auth/google/drive/files", {
+        credentials: "include", // Include cookies for authentication
+      });
+
+      if (!response.ok) {
+        initiateGoogleDriveAuth();
+        return;
+      }
+      showToast("success", "", "Connected To Google Drive");
+
+      const data = await response.json();
+      dispatch(setDriveFiles(data.pdfFiles));
+    } catch (error) {
+      console.log({error});
+      
+    } finally {
+      dispatch(setDriveLoading(false));
+    }
+  };
+
+
+const initiateGoogleDriveAuth = () => {
+  // Redirect to authenticate Google Drive
+  window.location.href = "http://localhost:4000/auth/google/drive?redirect=true";
+};
   const startDragging = (event: React.MouseEvent) => {
     isDragging.current = true;
     startX.current = event.clientX;
@@ -123,7 +162,9 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
               )}
             </div>
             <div className="flex items-center justify-between flex-1">
-              <span className="font-semibold text-gray-700 dark:text-gray-200">Local Files</span>
+              <span className="font-semibold text-gray-700 dark:text-gray-200">
+                Local Files
+              </span>
               <button
                 className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors duration-200"
                 onClick={(e) => {
@@ -143,53 +184,57 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
             )}
           >
             <div
-  className={cn(
-    "overflow-y-auto transition-all duration-200", // Enable native scrollbar
-    expandedSections["local"] ? "max-h-[500px]" : "max-h-0" // Adjust height dynamically
-  )}
->
-            {uploadedFiles.length > 0 ? (
-              <div className="space-y-1 p-2">
-                {uploadedFiles.map((file: any, i: number) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "flex items-center justify-between p-3 rounded-lg cursor-pointer",
-                      "hover:bg-gray-100 dark:hover:bg-gray-700",
-                      "transition-all duration-200",
-                      selectedFileId === file._id && "bg-blue-50 dark:bg-blue-900/50"
-                    )}
-                    onClick={() => {
-                      dispatch(setCurrentChatingFile(file.filename));
-                      dispatch(setFileId(file._id));
-                    }}
-                  >
-                    <div className="flex items-center flex-1 min-w-0">
-                      <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
-                        {getFileIcon(file.mimeType)}
+              className={cn(
+                "overflow-y-auto transition-all duration-200", // Enable native scrollbar
+                expandedSections["local"] ? "max-h-[500px]" : "max-h-0" // Adjust height dynamically
+              )}
+            >
+              {uploadedFiles.length > 0 ? (
+                <div className="space-y-1 p-2">
+                  {uploadedFiles.map((file: any, i: number) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-lg cursor-pointer",
+                        "hover:bg-gray-100 dark:hover:bg-gray-700",
+                        "transition-all duration-200",
+                        selectedFileId === file._id &&
+                          "bg-blue-50 dark:bg-blue-900/50"
+                      )}
+                      onClick={() => {
+                        dispatch(setCurrentChatingFile(file.filename));
+                        dispatch(setFileId(file._id));
+                      }}
+                    >
+                      <div className="flex items-center flex-1 min-w-0">
+                        <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
+                          {getFileIcon(file.mimeType)}
+                        </div>
+                        <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
+                          {file.filename}
+                        </span>
                       </div>
-                      <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
-                        {file.filename}
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                        {formatFileSize(file.fileSize)}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
-                      {formatFileSize(file.fileSize)}
-                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 text-center">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    No files uploaded
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-4 text-center">
-                <div className="text-sm text-gray-500 dark:text-gray-400">No files uploaded</div>
-                <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">Upload files to get started</div>
-              </div>
-            )}
-          </div>
-          
+                  <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                    Upload files to get started
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Google Drive Section */}
+        {/* Google Drive Files Section */}
         <div className="rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
           <div
             className="p-4 flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
@@ -203,29 +248,91 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
               )}
             </div>
             <div className="flex items-center justify-between flex-1">
-              <span className="font-semibold text-gray-700 dark:text-gray-200">Google Drive</span>
+              <span className="font-semibold text-gray-700 dark:text-gray-200">
+                Google Drive Files
+              </span>
               <button
                 className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-full hover:bg-green-700 transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
-                  dispatch(setCurrentChatingFile("Google Drive"));
+                  dispatch(setCurrentChatingFile("Google Drive Files"));
                 }}
               >
                 Chat
               </button>
             </div>
           </div>
+
           <div
             className={cn(
               "overflow-hidden transition-all duration-200",
               expandedSections["google"] ? "max-h-[500px]" : "max-h-0"
             )}
           >
-            <div className="p-4 text-center">
-              <div className="text-sm text-gray-500 dark:text-gray-400">Connect Google Drive</div>
-              <button className="mt-2 px-4 py-2 text-xs text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors duration-200">
-                Connect
-              </button>
+            <div
+              className={cn(
+                "overflow-y-auto transition-all duration-200", // Enable native scrollbar
+                expandedSections["google"] ? "max-h-[500px]" : "max-h-0" // Adjust height dynamically
+              )}
+            >
+              {driveFiles.length > 0 ? (
+                <div className="space-y-1 p-2">
+                  {driveFiles.map((file: any, i: number) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-lg cursor-pointer",
+                        "hover:bg-gray-100 dark:hover:bg-gray-700",
+                        "transition-all duration-200",
+                        selectedFileId === file.id &&
+                          "bg-green-50 dark:bg-green-900/50"
+                      )}
+                      onClick={() => {
+                        dispatch(setCurrentChatingFile(file.name));
+                        dispatch(setFileId(file.id));
+                      }}
+                    >
+                      <div className="flex items-center flex-1 min-w-0">
+                        <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
+                          {getFileIcon(file.mimeType)}
+                        </div>
+                        <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
+                          {file.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatFileSize(file.fileSize)}
+                        </span>
+                        <a
+                          href={file.webViewLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:underline"
+                          onClick={(e) => e.stopPropagation()} // Prevent the parent onClick from firing
+                        >
+                          View
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 text-center">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    No files found in Google Drive
+                  </div>
+                  <button
+                    className="mt-2 px-4 py-2 text-xs text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors duration-200"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fetchDriveFiles(); // Function to connect to Google Drive
+                    }}
+                  >
+                    Connect to Google Drive
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -244,7 +351,9 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
               )}
             </div>
             <div className="flex items-center justify-between flex-1">
-              <span className="font-semibold text-gray-700 dark:text-gray-200">Box</span>
+              <span className="font-semibold text-gray-700 dark:text-gray-200">
+                Box
+              </span>
               <button
                 className="px-3 py-1 text-xs font-medium text-white bg-purple-600 rounded-full hover:bg-purple-700 transition-colors duration-200"
                 onClick={(e) => {
@@ -263,7 +372,9 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
             )}
           >
             <div className="p-4 text-center">
-              <div className="text-sm text-gray-500 dark:text-gray-400">Connect Box Account</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Connect Box Account
+              </div>
               <button className="mt-2 px-4 py-2 text-xs text-white bg-purple-500 rounded-lg hover:bg-purple-600 transition-colors duration-200">
                 Connect
               </button>

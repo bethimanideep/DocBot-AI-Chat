@@ -22,6 +22,8 @@ import router from "./routes/auth";
 import passport from "passport";
 import cookieParser from "cookie-parser";
 import { User, UserFile } from "./models/schema";
+import { google } from "googleapis";
+import jwt, { JwtPayload } from "jsonwebtoken";
 
 const userRetrievers: any = {};
 
@@ -71,7 +73,92 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: process.env.CORS,
+    credentials: true,
   },
+});
+io.on("connection", async (socket) => {
+  console.log("New client connected");
+
+  // Extract cookies manually from socket handshake headers
+  const cookies = socket.handshake.headers.cookie;
+  let accessToken = null;
+  let userToken = null;
+
+  if (cookies) {
+    const parsedCookies = Object.fromEntries(
+      cookies.split("; ").map((c) => c.split("="))
+    );
+    accessToken = parsedCookies.driveAccessToken; // Google Drive Access Token
+    userToken = parsedCookies.token; // User JWT Token
+    console.log({ accessToken, userToken });
+  }
+
+  if (!userToken) {
+    console.log("No user token found, not sending file list");
+    return socket.emit("initialFileList", {
+      error: "Unauthorized: No access token",
+    });
+  }
+
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(
+      userToken,
+      process.env.JWT_SECRET!
+    ) as JwtPayload;
+
+    const userId = decoded.userId;
+
+    // Fetch the file list for the logged-in user
+    const fileList = await UserFile.find({ userId });
+
+    // Emit the file list to the frontend upon connection
+    socket.emit("initialFileList", { fileList });
+    console.log("File list sent to client:", fileList);
+  } catch (error: any) {
+    console.error("Invalid user token:", error.message);
+    socket.emit("initialFileList", { error: "Invalid or expired token" });
+  }
+
+  // Fetch Drive files if accessToken exists
+  if (accessToken) {
+    try {
+      // Initialize OAuth2 client with access token
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+
+      // Create Google Drive API client
+      const drive = google.drive({ version: "v3", auth: oauth2Client });
+
+      // Fetch PDF files
+      const response = await drive.files.list({
+        q: "mimeType='application/pdf'",
+        fields: "files(id, name, webViewLink, size, mimeType)",
+      });
+
+      const pdfFiles = response.data.files?.map((file) => ({
+        id: file.id,
+        name: file.name,
+        webViewLink: file.webViewLink,
+        fileSize: file.size ? parseInt(file.size) : 0,
+        mimeType: file.mimeType || "application/pdf",
+      }));
+
+      // Emit the response to the frontend automatically
+      socket.emit("driveFilesResponse", { pdfFiles });
+    } catch (error) {
+      console.error("Error fetching Google Drive files:", error);
+      socket.emit("driveFilesResponse", {
+        error: "Failed to fetch Google Drive files",
+      });
+    }
+  } else {
+    console.log("No Google Drive access token found");
+  }
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected");
+  });
 });
 
 const llm = new ChatOpenAI({
@@ -148,7 +235,7 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
             chunk_index: i,
             text: chunks[i],
             userId,
-            Local: "Local"
+            Local: "Local",
           },
           vector: embeddingsArray[i],
         });
@@ -164,7 +251,7 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
 
     res.json({
       message: "Files processed and embeddings stored successfully in Weaviate",
-      fileList
+      fileList,
     });
   } catch (error) {
     console.error("Error processing files:", error);
@@ -241,7 +328,7 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
       client: weaviateClient, // Weaviate client instance
       indexName: "Cwd", // Weaviate class name
       metadataKeys: ["file_name", "fileId", "timestamp"], // Metadata to retrieve
-      textKey: "text" // The property in Weaviate that contains the text
+      textKey: "text", // The property in Weaviate that contains the text
     });
 
     // Apply filtering inside the retriever
@@ -252,10 +339,10 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
           operator: "And",
           operands: [
             { path: ["userId"], operator: "Equal", valueText: userId },
-            { path: ["local"], operator: "Equal", valueText: "Local" }
-          ]
-        }
-      }
+            { path: ["local"], operator: "Equal", valueText: "Local" },
+          ],
+        },
+      },
     });
 
     // Create RetrievalQAChain
@@ -289,7 +376,7 @@ app.post("/userfilechat", async (req: any, res: any) => {
       client: weaviateClient, // Weaviate client instance
       indexName: "Cwd", // Weaviate class name
       metadataKeys: ["file_name", "fileId", "timestamp"], // Metadata to retrieve
-      textKey: "text" // The property in Weaviate that contains the text
+      textKey: "text", // The property in Weaviate that contains the text
     });
 
     // Apply filtering inside the retriever
@@ -299,10 +386,10 @@ app.post("/userfilechat", async (req: any, res: any) => {
         where: {
           operator: "And",
           operands: [
-            { path: ["fileId"], operator: "Equal", valueText: fileId }
-          ]
-        }
-      }
+            { path: ["fileId"], operator: "Equal", valueText: fileId },
+          ],
+        },
+      },
     });
 
     // Create RetrievalQAChain
@@ -316,8 +403,7 @@ app.post("/userfilechat", async (req: any, res: any) => {
     });
     console.log(response.text);
     console.log(response.sourceDocuments);
-    
-    
+
     res.status(200).json({
       answer: response.text || "No answer found",
     });
@@ -334,7 +420,9 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
     const { userId, fileId, query } = req.body;
 
     if (!userId || !fileId || !query) {
-      return res.status(400).json({ error: "userId, fileId, and query are required." });
+      return res
+        .status(400)
+        .json({ error: "userId, fileId, and query are required." });
     }
 
     // Initialize user storage if not present
@@ -350,14 +438,16 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
       const result = await weaviateClient.graphql
         .get()
         .withClassName("Cwd") // Replace with your actual class name
-        .withFields(`
+        .withFields(
+          `
           userId
           file_name
           fileId
           chunk_index
           text
           _additional { vector }
-        `)
+        `
+        )
         .withWhere({
           path: ["fileId"],
           operator: "Equal",
@@ -367,7 +457,9 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
 
       const documents = result.data.Get.Cwd;
       if (!documents || documents.length === 0) {
-        return res.status(404).json({ error: "No embeddings found for this fileId." });
+        return res
+          .status(404)
+          .json({ error: "No embeddings found for this fileId." });
       }
 
       // Prepare documents with metadata
@@ -376,7 +468,9 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
         pageContent: doc.text,
         metadata: { file_name: doc.file_name, chunk_index: doc.chunk_index },
       }));
-      const embeddingsArray = documents.map((doc: any) => doc._additional.vector);
+      const embeddingsArray = documents.map(
+        (doc: any) => doc._additional.vector
+      );
 
       // Initialize or update the vector store
       if (!userRetrievers[userId][fileId]) {
@@ -388,11 +482,16 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
       }
 
       // Add documents to the vector store
-      await userRetrievers[userId][fileId].vectorStore.addVectors(embeddingsArray, vectors);
+      await userRetrievers[userId][fileId].vectorStore.addVectors(
+        embeddingsArray,
+        vectors
+      );
     }
 
     // Retrieve stored vector store
-    const retriever = userRetrievers[userId][fileId].vectorStore.asRetriever({ k: 1 });
+    const retriever = userRetrievers[userId][fileId].vectorStore.asRetriever({
+      k: 1,
+    });
 
     console.log("Running query on vector store...");
     const chain = RetrievalQAChain.fromLLM(llm, retriever);
@@ -400,16 +499,11 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
 
     console.log("Response:", response);
     res.status(200).json({ answer: response.text || "No answer found." });
-
   } catch (error) {
     console.error("Error:", error);
     res.status(500).json({ message: "Server error." });
   }
 });
-
-
-
-
 
 app.post("/searchbyfile", async (req: any, res: any) => {
   try {
@@ -608,21 +702,22 @@ app.post(
         }
 
         // Add documents to the vector store
-        await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
-          embeddingsArray,
-          documents
-        );
+        await userRetrievers[socketId][
+          file.originalname
+        ].vectorStore.addVectors(embeddingsArray, documents);
       }
 
       io.emit("progressbar", 100);
 
       // Retrieve stored files related to the user (socketId) with mimeType and fileSize
-      const userFiles = Object.keys(userRetrievers[socketId]).map((filename, index) => ({
-        _id: index,
-        filename,
-        mimeType: userRetrievers[socketId][filename].mimeType,
-        fileSize: userRetrievers[socketId][filename].fileSize,
-      }));
+      const userFiles = Object.keys(userRetrievers[socketId]).map(
+        (filename, index) => ({
+          _id: index,
+          filename,
+          mimeType: userRetrievers[socketId][filename].mimeType,
+          fileSize: userRetrievers[socketId][filename].fileSize,
+        })
+      );
 
       res.status(200).json({
         message: "Files uploaded and processed successfully.",
@@ -634,7 +729,6 @@ app.post(
     }
   }
 );
-
 
 app.post("/chat", async (req: any, res: any) => {
   try {
@@ -670,7 +764,7 @@ app.post("/chat", async (req: any, res: any) => {
 
     if (file_name === "Local Files") {
       console.log("Querying all retrievers...");
-      
+
       const vectorStores = Object.values(userFiles)
         .map((fileData: any) => fileData.vectorStore) // Extract vector store
         .filter((store) => store); // Remove undefined stores
@@ -706,7 +800,6 @@ app.post("/chat", async (req: any, res: any) => {
     res.status(500).json({ message: "Server error." });
   }
 });
-
 
 app.get("/", (req, res) => {
   console.log(req.cookies);

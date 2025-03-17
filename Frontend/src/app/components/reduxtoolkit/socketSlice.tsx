@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { Socket } from "socket.io-client";
 
 interface SocketState {
   socketId: string | null;
@@ -9,6 +10,7 @@ interface SocketState {
   progress: number;
   currentChatingFile: string | null; // New state for selected file
   fileId: string | null; // New state for selected file
+  socketInstance: Socket | null; 
 }
 
 const initialState: SocketState = {
@@ -20,6 +22,7 @@ const initialState: SocketState = {
   progress: 0,
   currentChatingFile: null, // Default null
   fileId: null, // Default null
+  socketInstance: null,
 };
 
 const socketSlice = createSlice({
@@ -52,9 +55,12 @@ const socketSlice = createSlice({
     setFileId: (state, action: PayloadAction<string | null>) => {
       state.fileId = action.payload;
     },
+    setSocketInstance: (state, action: any) => {
+      state.socketInstance = action.payload; // Set the socket instance
+    },
   },
 });
 
-export const { setSocketId, setUsername, setUploadedFiles, setIsLoading, setProgress, setUserId, setCurrentChatingFile, setFileId } =
+export const { setSocketId, setUsername, setUploadedFiles, setIsLoading, setProgress, setUserId, setCurrentChatingFile, setFileId, setSocketInstance } =
   socketSlice.actions;
 export default socketSlice.reducer;

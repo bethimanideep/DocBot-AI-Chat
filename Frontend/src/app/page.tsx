@@ -18,6 +18,7 @@ export default function Home() {
 
   return (
     <main className="flex flex-col h-screen">
+
       <Navbar />
       <div className="flex-1 flex overflow-hidden">
         {!username && uploadedFiles.length === 0 ? (
