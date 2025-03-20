@@ -13,7 +13,7 @@ const router = Router();
 // Google Sign-In (Basic Profile and Email)
 router.get(
   "/google",
-  passport.authenticate("google-signin", { scope: ["profile", "email"] })
+  passport.authenticate("google-signin", { scope: ["profile", "email"]  ,prompt:"select_account"})
 );
 
 // Google Sign-In Callback

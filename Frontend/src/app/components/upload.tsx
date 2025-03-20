@@ -118,7 +118,7 @@ const Upload = () => {
                   <Loader2 className="h-4 w-4 animate-spin" /> Uploading...
                 </>
               ) : (
-                "Upload File"
+                "Upload Files"
               )}
             </div>
           </Button>

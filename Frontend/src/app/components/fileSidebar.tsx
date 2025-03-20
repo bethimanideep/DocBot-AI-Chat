@@ -40,7 +40,6 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
     (state: RootState) => state.socket.uploadedFiles
   );
   const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
-  const isLoading = useSelector((state: RootState) => state.drive.isLoading);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -66,6 +65,7 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
 
       const data = await response.json();
       dispatch(setDriveFiles(data.pdfFiles));
+      toggleSection("google")
     } catch (error) {
       console.log({error});
       
@@ -120,11 +120,6 @@ const initiateGoogleDriveAuth = () => {
     if (size < 1024 * 1024 * 1024)
       return `${(size / (1024 * 1024)).toFixed(1)} MB`;
     return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  };
-
-  const handleFileClick = (file: FileData) => {
-    setSelectedFileId(file._id);
-    onFileSelect?.(file);
   };
 
   const toggleSection = (section: string) => {

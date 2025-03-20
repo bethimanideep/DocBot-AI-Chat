@@ -807,6 +807,7 @@ app.get("/", (req, res) => {
   res.send(req.cookies);
 });
 
+
 // Start server
 server.listen(process.env.SERVERPORT ?? 4000, async () => {
   try {
