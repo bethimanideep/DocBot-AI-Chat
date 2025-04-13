@@ -5,6 +5,15 @@ import {
   FileText,
   Image,
   FileSpreadsheet,
+  RefreshCw,
+  RotateCw,
+  RefreshCcw,
+  FolderSync,
+  CloudDownload,
+  Repeat,
+  Loader2,
+  FolderSyncIcon,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RootState } from "./reduxtoolkit/store";
@@ -18,6 +27,7 @@ import {
   setDriveError,
 } from "./reduxtoolkit/driveSlice";
 import { showToast } from "@/lib/toast";
+import { CheckboxItem } from "@radix-ui/react-dropdown-menu";
 
 interface FileData {
   _id: string;
@@ -36,9 +46,11 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
     Record<string, boolean>
   >({});
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
   const uploadedFiles = useSelector(
     (state: RootState) => state.socket.uploadedFiles
   );
+  const userId = useSelector((state: RootState) => state.socket.userId);
   const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -47,15 +59,53 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
   const currentX = useRef(0);
   const sidebarWidth = useRef(300);
 
+  const handleSyncFile = async (fileId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+  
+    // Don't sync if already synced
+    const file = driveFiles.find((f: any) => f.id === fileId);
+    if (file && (file as any).synced) return;
+  
+    // Set loading state for this file
+    setLoadingFiles((prev) => ({ ...prev, [fileId]: true }));
+  
+    try {
+      const response = await fetch(
+        `http://localhost:4000/gdrive/sync?fileId=${fileId}&userId=${userId}`,
+        {
+          credentials: "include",
+        }
+      );
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to sync file");
+      }
+  
+      const data = await response.json();
+      showToast("success", "File Synced", "File Sync Successful");
+  
+    } catch (error: any) {
+      showToast("error", "Sync Failed", error.message);
+      console.error("Error syncing file:", error);
+    } finally {
+      // Remove loading state
+      setLoadingFiles((prev) => ({ ...prev, [fileId]: false }));
+    }
+  };
+  
 
- const fetchDriveFiles = async () => {
+  const fetchDriveFiles = async () => {
     try {
       dispatch(setDriveLoading(true));
 
       // Fetch PDF files from Google Drive
-      const response = await fetch("http://localhost:4000/auth/google/drive/files", {
-        credentials: "include", // Include cookies for authentication
-      });
+      const response = await fetch(
+        `http://localhost:4000/auth/google/drive/files?userId=${userId}`,
+        {
+          credentials: "include", // Include cookies for authentication
+        }
+      );
 
       if (!response.ok) {
         initiateGoogleDriveAuth();
@@ -65,20 +115,19 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
 
       const data = await response.json();
       dispatch(setDriveFiles(data.pdfFiles));
-      toggleSection("google")
+      toggleSection("google");
     } catch (error) {
-      console.log({error});
-      
+      console.log({ error });
     } finally {
       dispatch(setDriveLoading(false));
     }
   };
 
-
-const initiateGoogleDriveAuth = () => {
-  // Redirect to authenticate Google Drive
-  window.location.href = "http://localhost:4000/auth/google/drive?redirect=true";
-};
+  const initiateGoogleDriveAuth = () => {
+    // Redirect to authenticate Google Drive
+    window.location.href =
+      "http://localhost:4000/auth/google/drive?redirect=true";
+  };
   const startDragging = (event: React.MouseEvent) => {
     isDragging.current = true;
     startX.current = event.clientX;
@@ -164,7 +213,7 @@ const initiateGoogleDriveAuth = () => {
                 className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
-                  dispatch(setCurrentChatingFile("Local Files"));
+                  dispatch(setCurrentChatingFile("local"));
                 }}
               >
                 Chat
@@ -229,8 +278,8 @@ const initiateGoogleDriveAuth = () => {
           </div>
         </div>
 
-        {/* Google Drive Files Section */}
-        <div className="rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+         {/* Google Drive Files Section */}
+         <div className="rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
           <div
             className="p-4 flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
             onClick={() => toggleSection("google")}
@@ -250,7 +299,7 @@ const initiateGoogleDriveAuth = () => {
                 className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-full hover:bg-green-700 transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
-                  dispatch(setCurrentChatingFile("Google Drive Files"));
+                  dispatch(setCurrentChatingFile("gdrive"));
                 }}
               >
                 Chat
@@ -266,8 +315,8 @@ const initiateGoogleDriveAuth = () => {
           >
             <div
               className={cn(
-                "overflow-y-auto transition-all duration-200", // Enable native scrollbar
-                expandedSections["google"] ? "max-h-[500px]" : "max-h-0" // Adjust height dynamically
+                "overflow-y-auto transition-all duration-200",
+                expandedSections["google"] ? "max-h-[500px]" : "max-h-0"
               )}
             >
               {driveFiles.length > 0 ? (
@@ -283,8 +332,13 @@ const initiateGoogleDriveAuth = () => {
                           "bg-green-50 dark:bg-green-900/50"
                       )}
                       onClick={() => {
-                        dispatch(setCurrentChatingFile(file.name));
-                        dispatch(setFileId(file.id));
+                        if(file.synced){
+
+                          dispatch(setCurrentChatingFile(file.name));
+                          dispatch(setFileId(file._id));
+                        }else{
+                          showToast("error", "Sync File", "File is not in Sync");
+                        }
                       }}
                     >
                       <div className="flex items-center flex-1 min-w-0">
@@ -299,12 +353,22 @@ const initiateGoogleDriveAuth = () => {
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           {formatFileSize(file.fileSize)}
                         </span>
+                        {file.synced ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : loadingFiles[file.id] ? (
+                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                        ) : (
+                          <Repeat
+                            className="w-4 h-4 text-blue-500 hover:text-blue-700 cursor-pointer"
+                            onClick={(e) => handleSyncFile(file.id, e)}
+                          />
+                        )}
                         <a
                           href={file.webViewLink}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-blue-500 hover:underline"
-                          onClick={(e) => e.stopPropagation()} // Prevent the parent onClick from firing
+                          onClick={(e) => e.stopPropagation()}
                         >
                           View
                         </a>
@@ -321,7 +385,7 @@ const initiateGoogleDriveAuth = () => {
                     className="mt-2 px-4 py-2 text-xs text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors duration-200"
                     onClick={(e) => {
                       e.stopPropagation();
-                      fetchDriveFiles(); // Function to connect to Google Drive
+                      fetchDriveFiles();
                     }}
                   >
                     Connect to Google Drive

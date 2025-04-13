@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ChangeEvent, useEffect, useState } from "react";
+import React, { ChangeEvent, useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import { useDispatch, useSelector } from "react-redux";
 import { showToast } from "@/lib/toast";
@@ -11,24 +11,63 @@ import { RootState } from "./reduxtoolkit/store";
 import { setSocketId, setUploadedFiles ,setProgress,setIsLoading, setSocketInstance} from "./reduxtoolkit/socketSlice";
 import { setDriveFiles } from "./reduxtoolkit/driveSlice";
 
+interface WelcomeProps {
+  onGetStarted: () => void;
+}
+
+interface FileSyncCompleteEvent {
+  fileId: string;
+  synced: boolean;
+  _id:string;
+}
+
+
 const Upload = () => {
   const dispatch = useDispatch();
   const socketId = useSelector((state: RootState) => state.socket.socketId);
   const isLoading = useSelector((state: RootState) => state.socket.isLoading);
   const userId = useSelector((state: RootState) => state.socket.userId);
+  const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
+  const driveFilesRef = useRef(driveFiles);
+
   const uploadUrl = userId 
   ? `http://localhost:4000/upload?userId=${userId}` 
   : `http://localhost:4000/myuserupload?socketId=${socketId}`;
+
   useEffect(() => {
+    driveFilesRef.current = driveFiles;
+  }, [driveFiles]);
+  useEffect(() => {
+    console.log("Before:", driveFiles);
     const newSocket: any = io("http://localhost:4000",{withCredentials:true});
     newSocket.on("connect", () => {
       dispatch(setSocketId(newSocket.id));
       console.log("Connected with socket ID:", newSocket.id);
+      console.log({userId});
+      
+      // Join room after connection is established
+      if (userId) {
+        newSocket.emit('joinRoom', userId);
+        console.log(`Attempting to join room ${userId}`);
+      }
     });
 
     newSocket.on("progressbar", (message: any) => {
       console.log(message);
       dispatch(setProgress(message));
+    });
+
+    newSocket.on('fileSyncStatusUpdate', ({ fileId, synced ,_id}: FileSyncCompleteEvent) => {
+      console.log("received response")
+     
+      
+      const updatedFiles = driveFilesRef.current.map((f: any) =>
+        f.id === fileId ? { ...f, synced ,_id} : f
+      );
+      dispatch(setDriveFiles(updatedFiles));
+      
+      
+      showToast("success", "Sync Complete", `Sync Completed successfully`);
     });
     newSocket.on("driveFilesResponse", (data: any) => {
       if (data.error) {

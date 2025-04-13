@@ -53,13 +53,14 @@ export const Chat = () => {
         };
       } else {
         // Case 2: userId is not null
-        if (currentChatingFile === "Local Files") {
+        if (currentChatingFile === "local"||currentChatingFile === "gdrive") {
           url = "http://localhost:4000/userlocalfiles";
           body = {
             query,
             userId,
+            sourceType:currentChatingFile
           };
-        } else {
+        }else{
           url = "http://localhost:4000/userfilechat";
           body = {
             query,

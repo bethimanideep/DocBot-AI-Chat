@@ -21,7 +21,7 @@ import weaviate from "weaviate-ts-client";
 import router from "./routes/auth";
 import passport from "passport";
 import cookieParser from "cookie-parser";
-import { User, UserFile } from "./models/schema";
+import { GoogleDriveFile, User, UserFile } from "./models/schema";
 import { google } from "googleapis";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
@@ -79,6 +79,16 @@ const io = new Server(server, {
 io.on("connection", async (socket) => {
   console.log("New client connected");
 
+  // Handle room joining first
+  socket.on('joinRoom', (userId: string) => {
+    if (!userId) {
+      console.error('No userId provided for joinRoom');
+      return;
+    }
+    socket.join(userId);
+    console.log(`Socket ${socket.id} joined room ${userId}`);
+  });
+
   // Extract cookies manually from socket handshake headers
   const cookies = socket.handshake.headers.cookie;
   let accessToken = null;
@@ -123,6 +133,10 @@ io.on("connection", async (socket) => {
   // Fetch Drive files if accessToken exists
   if (accessToken) {
     try {
+      // Verify JWT token again to get userId
+      const decoded = jwt.verify(userToken, process.env.JWT_SECRET!) as JwtPayload;
+      const userId = decoded.userId;
+
       // Initialize OAuth2 client with access token
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
@@ -133,28 +147,85 @@ io.on("connection", async (socket) => {
       // Fetch PDF files
       const response = await drive.files.list({
         q: "mimeType='application/pdf'",
-        fields: "files(id, name, webViewLink, size, mimeType)",
+        fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
+      });
+
+      // Get all file IDs from the response
+      const fileIds = response.data.files?.map(file => file.id) || [];
+
+      // Find all synced files from MongoDB
+      const syncedFiles = await GoogleDriveFile.find({
+        userId,
+        fileId: { $in: fileIds }
+      });
+      console.log({syncedFiles});
+      
+
+
+      // Create a map of fileId to sync status
+      const syncStatusMap = new Map();
+      syncedFiles.forEach(file => {
+        syncStatusMap.set(file.fileId, file.synced);
+      });
+      const sync_idMap = new Map();
+      syncedFiles.forEach(file => {
+        sync_idMap.set(file.fileId, file._id);
       });
 
       const pdfFiles = response.data.files?.map((file) => ({
         id: file.id,
         name: file.name,
         webViewLink: file.webViewLink,
+        thumbnailLink: file.thumbnailLink,
         fileSize: file.size ? parseInt(file.size) : 0,
         mimeType: file.mimeType || "application/pdf",
+        synced: syncStatusMap.get(file.id) || false, // Add sync status
+        _id: sync_idMap.get(file.id) || false // Add sync status
       }));
 
-      // Emit the response to the frontend automatically
+      // Emit the response to the frontend
       socket.emit("driveFilesResponse", { pdfFiles });
     } catch (error) {
       console.error("Error fetching Google Drive files:", error);
-      socket.emit("driveFilesResponse", {
-        error: "Failed to fetch Google Drive files",
-      });
+      if (error instanceof Error) {
+        socket.emit("driveFilesResponse", {
+          error: "Failed to fetch Google Drive files",
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      } else {
+        socket.emit("driveFilesResponse", {
+          error: "Failed to fetch Google Drive files",
+          details: "An unknown error occurred"
+        });
+      }
     }
   } else {
     console.log("No Google Drive access token found");
+    socket.emit("driveFilesResponse", {
+      error: "Google Drive not connected",
+      actionRequired: "connect"
+    });
   }
+
+  // Handle file sync completion events
+  socket.on('fileSyncComplete', async ({ fileId }) => {
+    try {
+      const decoded = jwt.verify(userToken, process.env.JWT_SECRET!) as JwtPayload;
+      const userId = decoded.userId;
+
+      // Update the file's sync status in MongoDB
+      await GoogleDriveFile.findOneAndUpdate(
+        { userId, fileId },
+        { synced: true, lastSynced: new Date() },
+        { new: true }
+      );
+
+      // Notify all clients about the sync status update
+      io.emit('fileSyncStatusUpdate', { fileId, synced: true });
+    } catch (error) {
+      console.error('Error updating sync status:', error);
+    }
+  });
 
   socket.on("disconnect", () => {
     console.log("Client disconnected");
@@ -184,6 +255,123 @@ async function processPdf(fileBuffer: Buffer) {
   const chunks = await splitter.createDocuments([text]);
   return chunks.map((chunk) => chunk.pageContent);
 }
+
+app.get('/gdrive/sync', async (req: any, res: any) => {
+  try {
+    const { fileId, userId } = req.query as { fileId: string; userId: string };
+    const driveAccessToken = req.cookies.driveAccessToken as string;
+
+    // Initialize Google Drive client
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID!,
+      process.env.GOOGLE_CLIENT_SECRET!
+    );
+    oauth2Client.setCredentials({ access_token: driveAccessToken });
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+    // Get file metadata
+    const { data: fileMetadata } = await drive.files.get({
+      fileId,
+      fields: 'id,name,size,mimeType,webViewLink,webContentLink,thumbnailLink'
+    });
+
+    // Download file content
+    const { data: fileContent } = await drive.files.get({
+      fileId,
+      alt: 'media'
+    }, { responseType: 'arraybuffer' });
+    const fileBuffer = Buffer.from(fileContent as ArrayBuffer);
+
+    // Update or create file record
+    const fileData = {
+      userId,
+      fileId: fileMetadata.id,
+      filename: fileMetadata.name,
+      fileSize: parseInt(fileMetadata.size || '0'),
+      mimeType: fileMetadata.mimeType,
+      webViewLink: fileMetadata.webViewLink,
+      webContentLink: fileMetadata.webContentLink,
+      thumbnailLink: fileMetadata.thumbnailLink,
+      lastSynced: new Date()
+    };
+
+    const existingFile = await GoogleDriveFile.findOneAndUpdate(
+      { userId, fileId: fileMetadata.id },
+      fileData,
+      { upsert: true, new: true }
+    );
+
+    // Process PDF and generate embeddings
+    const chunks = await processPdf(fileBuffer);
+    const embeddingsArray = await embeddings.embedDocuments(chunks);
+
+    // Delete existing Weaviate objects
+    const result = await weaviateClient.graphql.get()
+      .withClassName('Cwd')
+      .withFields('_additional { id }')
+      .withWhere({
+        path: ['fileId'],
+        operator: 'Equal',
+        valueString: existingFile._id.toString()
+      })
+      .do();
+
+    const idsToDelete = result.data?.Get?.Cwd?.map((item: any) => item._additional.id) || [];
+    for (const id of idsToDelete) {
+      await weaviateClient.data.deleter()
+        .withClassName('Cwd')
+        .withId(id)
+        .do();
+    }
+
+    // Create new batch in Weaviate
+    const batcher = weaviateClient.batch.objectsBatcher();
+    chunks.forEach((chunk, i) => {
+      batcher.withObject({
+        class: "Cwd",
+        properties: {
+          fileId: existingFile._id.toString(),
+          file_name: fileMetadata.name,
+          timestamp: new Date().toISOString(),
+          chunk_index: i,
+          text: chunk,
+          userId,
+          sourceType: "gdrive",
+        },
+        vector: embeddingsArray[i],
+      });
+    });
+    await batcher.do();
+
+    // Mark as synced after successful processing
+    const updatedFile :any= await GoogleDriveFile.findByIdAndUpdate(
+      existingFile._id,
+      { synced: true },
+      { new: true }
+    );
+
+    io.to(userId).emit('fileSyncStatusUpdate', {
+      _id:updatedFile._id,
+      fileId: fileMetadata.id,
+      synced: true
+    });
+
+    res.json({
+      success: true,
+      message: "File synced successfully",
+      chunksProcessed: chunks.length
+    });
+
+  } catch (error: unknown) {
+    console.error("Error syncing Google Drive file:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ 
+      message: "Error syncing file",
+      error: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+    });
+  }
+});
 
 // Endpoint for uploading PDFs and storing embeddings in Pinecone
 
@@ -235,7 +423,7 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
             chunk_index: i,
             text: chunks[i],
             userId,
-            Local: "Local",
+            sourceType: "local",
           },
           vector: embeddingsArray[i],
         });
@@ -318,7 +506,7 @@ app.post("/search", async (req: any, res: any) => {
 
 app.post("/userlocalfiles", async (req: any, res: any) => {
   try {
-    const { query, userId } = req.body; // Get user query
+    const { query, userId ,sourceType} = req.body; // Get user query
 
     if (!query || !userId) {
       return res.status(400).json({ message: "Query and userId are required" });
@@ -339,7 +527,7 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
           operator: "And",
           operands: [
             { path: ["userId"], operator: "Equal", valueText: userId },
-            { path: ["local"], operator: "Equal", valueText: "Local" },
+            { path: ["sourceType"], operator: "Equal", valueText: `${sourceType}` },
           ],
         },
       },
@@ -367,7 +555,8 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
 app.post("/userfilechat", async (req: any, res: any) => {
   try {
     const { query, fileId } = req.body; // Get user query and fileId
-
+    console.log(query,fileId);
+    
     if (!query || !fileId) {
       return res.status(400).json({ message: "Query and fileId are required" });
     }
@@ -600,7 +789,7 @@ app.get("/createIndex", async (req: any, res: any) => {
           vectorizer: "none", // Since we use precomputed embeddings
           vectorIndexType: "hnsw",
           properties: [
-            { name: "local", dataType: ["string"] },
+            { name: "sourceType", dataType: ["string"] },
             { name: "userId", dataType: ["string"] },
             { name: "fileId", dataType: ["string"] }, // Add fileId to link with MongoDB
             { name: "file_name", dataType: ["string"] },
@@ -629,7 +818,7 @@ app.get("/getAllData", async (req: any, res: any) => {
       .withClassName("Cwd") // Replace with your actual class name
       .withFields(
         `
-    local
+    sourceType
     userId
     file_name 
     fileId

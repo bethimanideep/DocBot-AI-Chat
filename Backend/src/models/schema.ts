@@ -25,8 +25,28 @@ const userFileSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+const googleDriveFileSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    fileId: { type: String, required: true },
+    filename: { type: String, required: true },
+    fileSize: { type: Number, required: true },
+    mimeType: { type: String, required: true },
+    webViewLink: { type: String },
+    webContentLink: { type: String },
+    thumbnailLink: { type: String },
+    lastSynced: { type: Date },
+    synced: { type: Boolean, default: false } // Add this new field
+  },
+  {
+    timestamps: true,
+  }
+);
+
+const GoogleDriveFile = mongoose.model('GoogleDriveFile', googleDriveFileSchema);
+
 
 const UserFile = mongoose.model('LocalFile', userFileSchema);
 const User = mongoose.model('User', userSchema);
 
-export { User ,UserFile};
+export { User, UserFile, GoogleDriveFile };

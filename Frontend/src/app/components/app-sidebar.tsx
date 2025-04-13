@@ -76,7 +76,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Application</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {uploadedFiles.map((item, i) => (
+              {uploadedFiles.map((item:any, i:any) => (
                 <SidebarMenuItem key={i}>
                   <SidebarMenuButton asChild>
                     <Button variant="outline" onClick={handleLogout}>

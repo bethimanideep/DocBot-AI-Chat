@@ -7,6 +7,8 @@ interface DriveFile {
   webViewLink: string;
   fileSize: number; // Size in bytes
   mimeType: string; // MIME type of the file
+  synced:boolean;
+  _id:string;
 }
 
 interface DriveState {

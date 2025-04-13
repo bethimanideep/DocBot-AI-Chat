@@ -8,15 +8,15 @@ import { setSocketId, setUploadedFiles ,setProgress,setIsLoading, setSocketInsta
 import { setDriveFiles } from "./reduxtoolkit/driveSlice";
 import { showToast } from '@/lib/toast';
 
-interface WelcomeProps {
-  onGetStarted: () => void;
-}
+
+
 
 export const Welcome = () => {
   const dispatch = useDispatch();
   const socketId = useSelector((state: RootState) => state.socket.socketId);
   const isLoading = useSelector((state: RootState) => state.socket.isLoading);
   const userId = useSelector((state: RootState) => state.socket.userId);
+  const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
   const uploadUrl = userId 
   ? `http://localhost:4000/upload?userId=${userId}` 
   : `http://localhost:4000/myuserupload?socketId=${socketId}`;
@@ -25,12 +25,20 @@ export const Welcome = () => {
     newSocket.on("connect", () => {
       dispatch(setSocketId(newSocket.id));
       console.log("Connected with socket ID:", newSocket.id);
+      console.log({userId});
+      
+      // Join room after connection is established
+      if (userId) {
+        newSocket.emit('joinRoom', userId);
+        console.log(`Attempting to join room ${userId}`);
+      }
     });
 
     newSocket.on("progressbar", (message: any) => {
       console.log(message);
       dispatch(setProgress(message));
     });
+
     newSocket.on("driveFilesResponse", (data: any) => {
       if (data.error) {
         console.log(data.error);

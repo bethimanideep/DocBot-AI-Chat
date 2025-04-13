@@ -3,7 +3,7 @@ dotenv.config();
 import { Router } from "express";
 import passport from "../config/passport";
 import jwt from "jsonwebtoken";
-import { User, UserFile } from "../models/schema"; // Import the updated User model
+import { GoogleDriveFile, User, UserFile } from "../models/schema"; // Import the updated User model
 import { hashPassword, verifyPassword } from "../utils/hash";
 import { sendOTP } from "../utils/otp";
 import { google } from "googleapis";
@@ -97,33 +97,56 @@ router.get("/google/drive/callback",passport.authenticate("google-drive", { fail
 
 router.get("/google/drive/files", async (req: any, res: any) => {
   try {
-    const accessToken = req.cookies.driveAccessToken; // Get access token from cookies
-    console.log({ accessToken });
+    const accessToken = req.cookies.driveAccessToken;
+    const userId = req.user?._id; // Assuming user is authenticated and userId is available
 
     if (!accessToken) {
       return res.status(401).json({ error: "Unauthorized: No access token provided" });
     }
 
-    // Initialize OAuth2 client with the provided access token
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
 
-    // Create a Google Drive API client
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-    // Fetch PDF files from Google Drive with additional fields
+    // Fetch PDF files from Google Drive
     const response = await drive.files.list({
       q: "mimeType='application/pdf'",
-      fields: "files(id, name, webViewLink, size, mimeType)", // Include size and mimeType
+      fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
     });
 
-    // Map the response to include fileSize and mimeType
-    const pdfFiles = response.data.files?.map((file: any) => ({
+    if (!response.data.files) {
+      return res.json({ pdfFiles: [] });
+    }
+
+    // Get all file IDs from the Google Drive response
+    const fileIds = response.data.files.map((file: any) => file.id);
+
+    // Find all synced files from MongoDB that match these file IDs
+    const syncedFiles = await GoogleDriveFile.find({
+      userId,
+      fileId: { $in: fileIds }
+    });
+
+    // Create a map of fileId to sync status
+    const syncStatusMap = new Map();
+    syncedFiles.forEach(file => {
+      syncStatusMap.set(file.fileId, file.synced);
+    });
+
+    // Prepare the response with sync status
+    const pdfFiles = response.data.files.map((file: any) => ({
       id: file.id,
       name: file.name,
       webViewLink: file.webViewLink,
-      fileSize: file.size ? parseInt(file.size) : 0, // Convert size to a number
-      mimeType: file.mimeType || 'application/pdf', // Default to 'application/pdf'
+      thumbnailLink: file.thumbnailLink,
+      fileSize: file.size ? parseInt(file.size) : 0,
+      mimeType: file.mimeType || 'application/pdf',
+      synced: syncStatusMap.get(file.id) || false
     }));
 
     return res.json({ pdfFiles });
