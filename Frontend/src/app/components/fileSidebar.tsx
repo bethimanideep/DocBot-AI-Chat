@@ -213,7 +213,7 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                 className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
-                  dispatch(setCurrentChatingFile("local"));
+                  dispatch(setCurrentChatingFile("Local Files"));
                 }}
               >
                 Chat
@@ -299,7 +299,7 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                 className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-full hover:bg-green-700 transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
-                  dispatch(setCurrentChatingFile("gdrive"));
+                  dispatch(setCurrentChatingFile("Gdrive"));
                 }}
               >
                 Chat
@@ -392,51 +392,6 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                   </button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* Box Files Section */}
-        <div className="rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-          <div
-            className="p-4 flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
-            onClick={() => toggleSection("box")}
-          >
-            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900 mr-3">
-              {expandedSections["box"] ? (
-                <ChevronDown className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              )}
-            </div>
-            <div className="flex items-center justify-between flex-1">
-              <span className="font-semibold text-gray-700 dark:text-gray-200">
-                Box
-              </span>
-              <button
-                className="px-3 py-1 text-xs font-medium text-white bg-purple-600 rounded-full hover:bg-purple-700 transition-colors duration-200"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  dispatch(setCurrentChatingFile("Box"));
-                }}
-              >
-                Chat
-              </button>
-            </div>
-          </div>
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-200",
-              expandedSections["box"] ? "max-h-[500px]" : "max-h-0"
-            )}
-          >
-            <div className="p-4 text-center">
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                Connect Box Account
-              </div>
-              <button className="mt-2 px-4 py-2 text-xs text-white bg-purple-500 rounded-lg hover:bg-purple-600 transition-colors duration-200">
-                Connect
-              </button>
             </div>
           </div>
         </div>

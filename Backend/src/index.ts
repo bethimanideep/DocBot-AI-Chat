@@ -24,6 +24,7 @@ import cookieParser from "cookie-parser";
 import { GoogleDriveFile, User, UserFile } from "./models/schema";
 import { google } from "googleapis";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import OpenAI from 'openai';
 
 const userRetrievers: any = {};
 
@@ -554,23 +555,29 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
 
 app.post("/userfilechat", async (req: any, res: any) => {
   try {
-    const { query, fileId } = req.body; // Get user query and fileId
-    console.log(query,fileId);
+    const { query, fileId } = req.body;
+    console.log(query, fileId);
     
     if (!query || !fileId) {
       return res.status(400).json({ message: "Query and fileId are required" });
     }
 
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders(); // Important for SSE
+
     const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient, // Weaviate client instance
-      indexName: "Cwd", // Weaviate class name
-      metadataKeys: ["file_name", "fileId", "timestamp"], // Metadata to retrieve
-      textKey: "text", // The property in Weaviate that contains the text
+      client: weaviateClient,
+      indexName: "Cwd",
+      metadataKeys: ["file_name", "fileId", "timestamp"],
+      textKey: "text",
     });
 
     // Apply filtering inside the retriever
     const retriever = vectorStore.asRetriever({
-      k: 1, // Set the number of documents to return
+      k: 1,
       filter: {
         where: {
           operator: "And",
@@ -581,24 +588,44 @@ app.post("/userfilechat", async (req: any, res: any) => {
       },
     });
 
-    // Create RetrievalQAChain
-    const chain = RetrievalQAChain.fromLLM(llm, retriever, {
+    // Create a streaming LLM instance
+    const streamingLLM = new ChatOpenAI({
+      model: "gpt-4",
+      temperature: 0,
+      streaming: true,
+      callbacks: [
+        {
+          handleLLMNewToken(token: string) {
+            res.write(`data: ${JSON.stringify({ token })}\n\n`);
+            res.flush();
+          },
+          handleLLMEnd() {
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            res.end();
+          },
+          handleLLMError(error: Error) {
+            console.error("LLM Error:", error);
+            res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+            res.end();
+          },
+        },
+      ],
+    });
+
+    // Create RetrievalQAChain with streaming LLM
+    const chain = RetrievalQAChain.fromLLM(streamingLLM, retriever, {
       returnSourceDocuments: true,
     });
 
-    // Ask the question and get a response
-    const response = await chain.call({
+    // Process the query
+    await chain.call({
       query: query,
     });
-    console.log(response.text);
-    console.log(response.sourceDocuments);
 
-    res.status(200).json({
-      answer: response.text || "No answer found",
-    });
   } catch (error) {
     console.error("Search error:", error);
-    res.status(500).json({ message: "Error searching Weaviate" });
+    res.write(`data: ${JSON.stringify({ error: "Error processing your request" })}\n\n`);
+    res.end();
   }
 });
 
@@ -1002,7 +1029,7 @@ server.listen(process.env.SERVERPORT ?? 4000, async () => {
   try {
     await mongoose.connect(`${process.env.MONGO_URI}`);
     console.log("Connected to MongoDB");
-    await client.connect();
+    // await client.connect();
     console.log("connected to redis");
     console.log(
       `Server is running on http://localhost:${process.env.SERVERPORT ?? 4000}`

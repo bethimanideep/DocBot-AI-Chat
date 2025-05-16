@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Send, Sparkles } from "lucide-react";
 import { RootState } from "./reduxtoolkit/store";
 import { useSelector } from "react-redux";
@@ -12,18 +12,16 @@ interface Message {
   sourceDocuments?: any[];
 }
 
+interface StreamingMessage extends Message {
+  isStreaming?: boolean;
+}
+
 export const Chat = () => {
   const [mounted, setMounted] = useState(false);
-  // const socketId = useSelector((state: RootState) => state.socket.socketId);
-  // const fileId = useSelector((state: RootState) => state.socket.fileId); // Add fileId from Redux
-  // const userId = useSelector((state: RootState) => state.socket.userId); // Add userId from Redux
   const { userId, socketId, fileId, currentChatingFile } = useSelector(
     (state: RootState) => state.socket
   );
-  // const currentChatingFile = useSelector(
-  //   (state: RootState) => state.socket.currentChatingFile
-  // );
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState<StreamingMessage[]>([
     {
       id: 1,
       text: "Hello! Ask me anything about your document.",
@@ -33,98 +31,175 @@ export const Chat = () => {
   ]);
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading]);
 
   useEffect(() => {
     setMounted(true);
+    return () => {
+      // Clean up any ongoing requests when component unmounts
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
-  const sendMessageToBackend = async (query: string) => {
-    try {
-      let url: string;
-      let body: any;
+  const handleStreamingResponse = async (query: string) => {
+    let url: string;
+    let body: any;
 
-      if (!userId) {
-        // Case 1: userId is null
-        url = "http://localhost:4000/chat";
+    if (!userId) {
+      url = "http://localhost:4000/chat";
+      body = {
+        query,
+        file_name: currentChatingFile || "Local Files",
+        socketId,
+      };
+    } else {
+      if (currentChatingFile === "Local Files" || currentChatingFile === "Gdrive") {
+        url = "http://localhost:4000/userlocalfiles";
         body = {
           query,
-          file_name: currentChatingFile || "Local Files",
-          socketId,
+          userId,
+          sourceType: currentChatingFile
         };
       } else {
-        // Case 2: userId is not null
-        if (currentChatingFile === "local"||currentChatingFile === "gdrive") {
-          url = "http://localhost:4000/userlocalfiles";
-          body = {
-            query,
-            userId,
-            sourceType:currentChatingFile
-          };
-        }else{
-          url = "http://localhost:4000/userfilechat";
-          body = {
-            query,
-            userId,
-            fileId: fileId, // Assuming currentChatingFile is the fileId
-          };
-        }
+        url = "http://localhost:4000/userfilechat";
+        body = {
+          query,
+          userId,
+          fileId: fileId,
+        };
       }
+    }
 
+    abortControllerRef.current = new AbortController();
+    const botMessageId = Date.now() + 1;
+    let fullText = "";
+    let sourceDocuments: any[] = [];
+
+    try {
       const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
+        signal: abortControllerRef.current.signal,
       });
 
-      const data = await response.json();
-      console.log("Backend Response:", data);
-
-      if (response.ok) {
-        return data;
-      } else {
-        showToast("warning", "", data.error);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    } catch (error: any) {
-      console.error("Error sending message:", error);
-      showToast("error", "", error.message);
-      throw error;
+
+      if (!response.body) {
+        throw new Error("ReadableStream not supported in this browser");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      // Add initial streaming message
+      setMessages(prev => [...prev, {
+        id: botMessageId,
+        text: "",
+        sender: "other",
+        timestamp: new Date().toISOString(),
+        isStreaming: true
+      }]);
+
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+
+        if (value) {
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n\n').filter(line => line.trim());
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.token) {
+                fullText += data.token;
+                setMessages(prev => prev.map(msg => 
+                  msg.id === botMessageId 
+                    ? { ...msg, text: fullText } 
+                    : msg
+                ));
+              }
+
+              if (data.done) {
+                setIsLoading(false);
+              }
+
+              if (data.error) {
+                throw new Error(data.error);
+              }
+            }
+          }
+        }
+      }
+
+      // Finalize the message
+      setMessages(prev => prev.map(msg => 
+        msg.id === botMessageId 
+          ? { ...msg, isStreaming: false } 
+          : msg
+      ));
+
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error("Streaming error:", error);
+        showToast("error", "Error", error.message || "Failed to get response");
+        
+        // Update the message with error state
+        setMessages(prev => prev.map(msg => 
+          msg.id === botMessageId 
+            ? { 
+                ...msg, 
+                text: msg.text || "Error: Could not get response",
+                isStreaming: false 
+              } 
+            : msg
+        ));
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newMessage.trim()) {
-      const userMessage: Message = {
-        id: Date.now(),
-        text: newMessage,
-        sender: "user",
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, userMessage]);
-      setNewMessage("");
-      setIsLoading(true);
+    if (!newMessage.trim()) return;
 
-      try {
-        console.log({ newMessage });
-        const response = await sendMessageToBackend(newMessage);
-        console.log({ response });
-        if (response) {
-          const botMessage: Message = {
-            id: Date.now() + 1,
-            text: response.answer,
-            sender: "other",
-            timestamp: new Date().toISOString(),
-            sourceDocuments: response.sourceDocuments,
-          };
-          setMessages((prev) => [...prev, botMessage]);
-        }
-      } catch (error: any) {
-        console.log(error);
-      } finally {
-        setIsLoading(false);
-      }
+    const userMessage: Message = {
+      id: Date.now(),
+      text: newMessage,
+      sender: "user",
+      timestamp: new Date().toISOString(),
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setNewMessage("");
+    setIsLoading(true);
+
+    try {
+      await handleStreamingResponse(newMessage);
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -158,9 +233,15 @@ export const Chat = () => {
                     : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 text-gray-800 dark:text-gray-200 rounded-[1rem] sm:rounded-[1.5rem] rounded-tl-sm shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)]"
                 }`}
               >
-                <p className={`text-[13px] sm:text-[14px] md:text-[15px] leading-relaxed tracking-wide font-medium ${
-                  message.sender === "user" ? "text-white/95" : "text-gray-700 dark:text-gray-300"
-                }`}>{message.text}</p>
+                {message.sender === "user" ? (
+                  <p className="text-[13px] sm:text-[14px] md:text-[15px] leading-relaxed tracking-wide font-medium text-white/95">
+                    {message.text}
+                  </p>
+                ) : (
+                  <div className="whitespace-pre-wrap text-[13px] sm:text-[14px] md:text-[15px] leading-relaxed tracking-wide font-medium">
+                    {message.text}
+                  </div>
+                )}
                 {message.sourceDocuments && (
                   <div className={`mt-3 sm:mt-4 pt-3 sm:pt-4 ${
                     message.sender === "user" 
@@ -222,6 +303,7 @@ export const Chat = () => {
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         <form

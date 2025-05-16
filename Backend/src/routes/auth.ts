@@ -204,6 +204,8 @@ router.post("/login", async (req:any, res:any) => {
       process.env.JWT_SECRET!,
       { expiresIn: "7d" }
     );
+    console.log(token,refreshToken);
+    
 
     // Set tokens in cookies
     res.cookie("token", token, {
@@ -262,6 +264,7 @@ router.post("/verify-otp", async (req:any, res:any) => {
         process.env.JWT_SECRET!,
         { expiresIn: "7d" }
       );
+      console.log(token,refreshToken);
 
       // Set tokens in cookies
       res.cookie("token", token, {
