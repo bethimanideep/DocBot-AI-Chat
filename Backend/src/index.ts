@@ -9,6 +9,7 @@ import { OpenAIEmbeddings } from "@langchain/openai";
 import session from "express-session";
 import { v4 as uuidv4 } from "uuid";
 import mongoose from "mongoose";
+import compression from 'compression';
 import { RetrievalQAChain } from "langchain/chains";
 import { createClient } from "redis";
 import { Document } from "@langchain/core/documents";
