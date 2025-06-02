@@ -38,9 +38,9 @@ interface FileData {
 
 interface FileSidebarProps {
   onFileSelect?: (file: FileData) => void;
+  onFileClick?: () => void; // Add this line
 }
-
-export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
+export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => {
   const dispatch = useDispatch();
   const [expandedSections, setExpandedSections] = useState<
     Record<string, boolean>
@@ -178,6 +178,25 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
     }));
   };
 
+    // Modify the click handlers for both local and Google Drive files
+    const handleLocalFileClick = (file: any) => {
+      dispatch(setCurrentChatingFile(file.filename));
+      dispatch(setFileId(file._id));
+      onFileClick?.(); // Call the onFileClick callback
+    };
+  
+    const handleDriveFileClick = (file: any) => {
+      console.log("clicked");
+      
+      if(file.synced) {
+        dispatch(setCurrentChatingFile(file.name));
+        dispatch(setFileId(file._id));
+        onFileClick?.(); // Call the onFileClick callback
+      } else {
+        showToast("error", "Sync File", "File is not in Sync");
+      }
+    };
+
   return (
     <div
       ref={sidebarRef}
@@ -207,16 +226,17 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
             </div>
             <div className="flex items-center justify-between flex-1">
               <span className="font-semibold text-gray-700 dark:text-gray-200">
-                Local Files
+                Local
               </span>
               <button
                 className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
                   dispatch(setCurrentChatingFile("Local Files"));
+                  onFileClick?.();
                 }}
               >
-                Chat
+                Chat With All
               </button>
             </div>
           </div>
@@ -248,6 +268,7 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
                       onClick={() => {
                         dispatch(setCurrentChatingFile(file.filename));
                         dispatch(setFileId(file._id));
+                        handleLocalFileClick(file)
                       }}
                     >
                       <div className="flex items-center flex-1 min-w-0">
@@ -293,16 +314,17 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
             </div>
             <div className="flex items-center justify-between flex-1">
               <span className="font-semibold text-gray-700 dark:text-gray-200">
-                Google Drive Files
+                Google Drive
               </span>
               <button
                 className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-full hover:bg-green-700 transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
                   dispatch(setCurrentChatingFile("Gdrive"));
+                  onFileClick?.();
                 }}
               >
-                Chat
+                Chat With All
               </button>
             </div>
           </div>
@@ -336,6 +358,7 @@ export const FileSidebar = ({ onFileSelect }: FileSidebarProps) => {
 
                           dispatch(setCurrentChatingFile(file.name));
                           dispatch(setFileId(file._id));
+                          handleDriveFileClick(file)
                         }else{
                           showToast("error", "Sync File", "File is not in Sync");
                         }

@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { RootState } from "./reduxtoolkit/store";
-import { setSocketId, setUploadedFiles ,setProgress,setIsLoading, setSocketInstance} from "./reduxtoolkit/socketSlice";
+import { setSocketId, setUploadedFiles ,setProgress,setIsLoading, setSocketInstance, setCurrentChatingFile} from "./reduxtoolkit/socketSlice";
 import { setDriveFiles } from "./reduxtoolkit/driveSlice";
 
 interface WelcomeProps {
@@ -23,13 +23,12 @@ interface FileSyncCompleteEvent {
 
 
 const Upload = () => {
-  const dispatch = useDispatch();
   const socketId = useSelector((state: RootState) => state.socket.socketId);
   const isLoading = useSelector((state: RootState) => state.socket.isLoading);
   const userId = useSelector((state: RootState) => state.socket.userId);
   const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
   const driveFilesRef = useRef(driveFiles);
-
+  const dispatch = useDispatch();
   const uploadUrl = userId 
   ? `http://localhost:4000/upload?userId=${userId}` 
   : `http://localhost:4000/myuserupload?socketId=${socketId}`;
@@ -74,6 +73,7 @@ const Upload = () => {
         console.log(data.error);
         
       } else {
+        if(data.pdfFiles.length>0)dispatch(setCurrentChatingFile("Gdrive"));
         dispatch(setDriveFiles(data.pdfFiles));
         console.log("Received drive files:", data.pdfFiles);
       }
@@ -83,6 +83,7 @@ const Upload = () => {
     if (data.error) {
       console.log("Error fetching initial files:", data.error);
     } else {
+      if(data.fileList.length>0)dispatch(setCurrentChatingFile("Local Files"));
       dispatch(setUploadedFiles(data.fileList));
       console.log("Received initial file list:", data.fileList);
     }
@@ -120,9 +121,10 @@ const Upload = () => {
     
     if (response.ok) {
       dispatch(setUploadedFiles(data.fileList));
-      showToast("success", "Uploaded successfully", data.message);
+      showToast("success", "", "Uploaded Successfully");
+      dispatch(setCurrentChatingFile("Local Files"));
     } else {
-      showToast("error", "Upload Failed", data.message);
+      showToast("error", "", "Upload Failed");
     }
   } catch (error: any) {
     console.error("Error uploading file:", error);

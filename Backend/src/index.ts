@@ -9,7 +9,6 @@ import { OpenAIEmbeddings } from "@langchain/openai";
 import session from "express-session";
 import { v4 as uuidv4 } from "uuid";
 import mongoose from "mongoose";
-import compression from 'compression';
 import { RetrievalQAChain } from "langchain/chains";
 import { createClient } from "redis";
 import { Document } from "@langchain/core/documents";
@@ -118,12 +117,17 @@ io.on("connection", async (socket) => {
       userToken,
       process.env.JWT_SECRET!
     ) as JwtPayload;
+    console.log({decoded});
+    
 
     const userId = decoded.userId;
+    console.log({userId});
+    
 
     // Fetch the file list for the logged-in user
     const fileList = await UserFile.find({ userId });
-
+    console.log({fileList});
+    
     // Emit the file list to the frontend upon connection
     socket.emit("initialFileList", { fileList });
     console.log("File list sent to client:", fileList);
@@ -338,7 +342,7 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
           chunk_index: i,
           text: chunk,
           userId,
-          sourceType: "gdrive",
+          sourceType: "Gdrive",
         },
         vector: embeddingsArray[i],
       });
@@ -425,7 +429,7 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
             chunk_index: i,
             text: chunks[i],
             userId,
-            sourceType: "local",
+            sourceType: "Local Files",
           },
           vector: embeddingsArray[i],
         });
@@ -508,17 +512,24 @@ app.post("/search", async (req: any, res: any) => {
 
 app.post("/userlocalfiles", async (req: any, res: any) => {
   try {
-    const { query, userId ,sourceType} = req.body; // Get user query
-
-    if (!query || !userId) {
-      return res.status(400).json({ message: "Query and userId are required" });
+    const { query, userId, sourceType } = req.body;
+    console.log({ query, userId, sourceType });
+    
+    if (!query || !userId || !sourceType) {
+      return res.status(400).json({ message: "Query, userId, and sourceType are required" });
     }
 
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
     const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient, // Weaviate client instance
-      indexName: "Cwd", // Weaviate class name
-      metadataKeys: ["file_name", "fileId", "timestamp"], // Metadata to retrieve
-      textKey: "text", // The property in Weaviate that contains the text
+      client: weaviateClient,
+      indexName: "Cwd",
+      metadataKeys: ["file_name", "fileId", "timestamp"],
+      textKey: "text",
     });
 
     // Apply filtering inside the retriever
@@ -535,22 +546,44 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
       },
     });
 
-    // Create RetrievalQAChain
-    const chain = RetrievalQAChain.fromLLM(llm, retriever, {
+    // Create a streaming LLM instance
+    const streamingLLM = new ChatOpenAI({
+      model: "gpt-4",
+      temperature: 0,
+      streaming: true,
+      callbacks: [
+        {
+          handleLLMNewToken(token: string) {
+            res.write(`data: ${JSON.stringify({ token })}\n\n`);
+          },
+          handleLLMEnd() {
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            res.end();
+          },
+          handleLLMError(error: Error) {
+            console.error("LLM Error:", error);
+            res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+            res.end();
+          },
+        },
+      ],
+    });
+
+    // Create RetrievalQAChain with streaming LLM
+    const chain = RetrievalQAChain.fromLLM(streamingLLM, retriever, {
       returnSourceDocuments: true,
     });
 
-    // Ask the question and get a response
-    const response = await chain.call({
+    // Process the query
+    const data=await chain.call({
       query: query,
     });
+    console.log({data:data.sourceDocuments});
 
-    res.status(200).json({
-      answer: response.text || "No answer found",
-    });
   } catch (error) {
     console.error("Search error:", error);
-    res.status(500).json({ message: "Error searching Weaviate" });
+    res.write(`data: ${JSON.stringify({ error: "Error processing your request" })}\n\n`);
+    res.end();
   }
 });
 
@@ -598,7 +631,6 @@ app.post("/userfilechat", async (req: any, res: any) => {
         {
           handleLLMNewToken(token: string) {
             res.write(`data: ${JSON.stringify({ token })}\n\n`);
-            res.flush();
           },
           handleLLMEnd() {
             res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
@@ -619,9 +651,11 @@ app.post("/userfilechat", async (req: any, res: any) => {
     });
 
     // Process the query
-    await chain.call({
+    const data=await chain.call({
       query: query,
     });
+    console.log({data:data.sourceDocuments});
+    
 
   } catch (error) {
     console.error("Search error:", error);
@@ -953,23 +987,19 @@ app.post("/chat", async (req: any, res: any) => {
 
     console.log("Received request:", { query, file_name, socketId });
 
-    // Validate request body
     if (!query || !file_name || !socketId) {
       return res
         .status(400)
         .json({ error: "Query, file_name, and socketId are required." });
     }
 
-    // Validate if user retriever exists
     if (!userRetrievers[socketId]) {
       console.log(`No retriever found for socketId: ${socketId}`);
       return res.status(400).json({ error: "Upload files first." });
     }
 
-    // Extract the files from userRetrievers
     const userFiles = userRetrievers[socketId];
 
-    // Validate if specific file exists when file_name is not "all"
     if (file_name !== "Local Files" && !userFiles[file_name]) {
       console.log(
         `File not found for socketId: ${socketId}, file: ${file_name}`
@@ -983,8 +1013,8 @@ app.post("/chat", async (req: any, res: any) => {
       console.log("Querying all retrievers...");
 
       const vectorStores = Object.values(userFiles)
-        .map((fileData: any) => fileData.vectorStore) // Extract vector store
-        .filter((store) => store); // Remove undefined stores
+        .map((fileData: any) => fileData.vectorStore)
+        .filter((store) => store);
 
       if (vectorStores.length === 0) {
         return res.status(400).json({ error: "No stored vector files found." });
@@ -1004,24 +1034,53 @@ app.post("/chat", async (req: any, res: any) => {
       retriever = userFiles[file_name].vectorStore.asRetriever({ k: 1 });
     }
 
-    console.log("Retriever ready, running query...");
-    const chain = RetrievalQAChain.fromLLM(llm, retriever);
-    const response = await chain.call({ query });
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
 
-    console.log("Response from chain:", response);
-    res.status(200).json({
-      answer: response.text || "No answer found",
+    // Streaming LLM with callbacks
+    const streamingLLM = new ChatOpenAI({
+      model: "gpt-4",
+      temperature: 0,
+      streaming: true,
+      callbacks: [
+        {
+          handleLLMNewToken(token: string) {
+            res.write(`data: ${JSON.stringify({ token })}\n\n`);
+          },
+          handleLLMEnd() {
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            res.end();
+          },
+          handleLLMError(error: Error) {
+            console.error("LLM Error:", error);
+            res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+            res.end();
+          },
+        },
+      ],
     });
+
+    const chain = RetrievalQAChain.fromLLM(streamingLLM, retriever, {
+      returnSourceDocuments: true,
+    });
+
+    await chain.call({ query });
+
   } catch (error) {
     console.error("Chat error:", error);
-    res.status(500).json({ message: "Server error." });
+    res.write(`data: ${JSON.stringify({ error: "Server error." })}\n\n`);
+    res.end();
   }
 });
 
-app.get("/", (req, res) => {
-  console.log(req.cookies);
 
-  res.send(req.cookies);
+app.get("/", (req, res) => {
+  console.log("hi");
+
+  res.send("hi");
 });
 
 

@@ -29,7 +29,6 @@ router.get(
       
       // Check if the user already exists in MongoDB
       let user = await User.findOne({ email: userEmail });
-
       if (!user) {
         // If user does not exist, create a new user
         user = new User({
@@ -42,10 +41,20 @@ router.get(
       }
 
       // Generate JWT token
-      const token = jwt.sign({ email: userEmail }, process.env.JWT_SECRET!, {
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, {
         expiresIn: "1h",
       });
-
+      res.cookie("username", username, {
+        httpOnly: false,
+        secure: true, // Use HTTPS in production
+        sameSite: "none", // For cross-domain requests
+      });
+      res.cookie("userId", user._id.toString(), {
+        httpOnly: false,
+        secure: true, // Use HTTPS in production
+        sameSite: "none", // For cross-domain requests
+      });
+      
       // Set tokens in cookies
       res.cookie("token", token, {
         httpOnly: true,

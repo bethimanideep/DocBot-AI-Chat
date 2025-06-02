@@ -53,9 +53,13 @@ export const Chat = () => {
   }, []);
 
   const handleStreamingResponse = async (query: string) => {
+    if(currentChatingFile==null){
+      showToast("warning", "", "Select Any File To Chat");
+     return; 
+    }
+    
     let url: string;
     let body: any;
-
     if (!userId) {
       url = "http://localhost:4000/chat";
       body = {
@@ -181,6 +185,10 @@ export const Chat = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(currentChatingFile==null){
+      showToast("warning", "", "Select Or Upload Any File To Chat");
+     return; 
+    }
     if (!newMessage.trim()) return;
 
     const userMessage: Message = {
@@ -211,13 +219,13 @@ export const Chat = () => {
     <div className="h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] bg-gradient-to-br from-sky-100 via-white to-purple-100 dark:from-[#0a0a0a] dark:via-[#111111] dark:to-[#1a1a1a] p-3 sm:p-4 md:p-6">
       <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.02] pointer-events-none"></div>
       {currentChatingFile && (
-        <div className="flex flex-col h-[5vh] max-w-2xl mx-auto justify-center items-center p-2 sm:p-3 md:p-4 bg-gradient-to-r from-white/80 to-white/60 dark:from-gray-800/20 dark:to-gray-800/10 border border-white/20 dark:border-white/5 rounded-xl sm:rounded-2xl backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] animate-float">
+        <div className="flex flex-col h-[5vh] max-w-2xl mx-auto justify-center items-center p-2 sm:p-3 md:p-4 bg-gradient-to-r from-white/80 to-white/60 dark:from-gray-800/20 dark:to-gray-800/10 border border-white/20 dark:border-white/5 rounded-xl sm:rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] animate-float">
           <span className="bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text text-transparent font-bold text-sm sm:text-base md:text-lg animate-shimmer">
             {currentChatingFile}
           </span>
         </div>
       )}
-      <div className="flex flex-col h-[80vh] max-w-2xl mx-auto p-3 sm:p-4 md:p-6 bg-white/80 dark:bg-[#121212]/50 backdrop-blur-xl rounded-2xl sm:rounded-3xl border border-white/20 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] mt-3 sm:mt-4 md:mt-5 hover:shadow-[0_20px_50px_rgb(0,0,0,0.15)] dark:hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all duration-300">
+      <div className="flex flex-col h-[80vh] max-w-2xl mx-auto p-3 sm:p-4 md:p-6 bg-white/80 dark:bg-[#121212]/50 rounded-2xl sm:rounded-3xl border border-white/20 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] mt-3 sm:mt-4 md:mt-5 hover:shadow-[0_20px_50px_rgb(0,0,0,0.15)] dark:hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all duration-300">
         <div className="flex-1 overflow-y-auto space-y-4 sm:space-y-6 p-2 sm:p-3 md:p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
           {messages.map((message) => (
             <div

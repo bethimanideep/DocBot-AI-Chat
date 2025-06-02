@@ -31,9 +31,9 @@ export function Otp({ email ,onClose}: any) {
 
       if (response.ok) {
         showToast("success", "", data.message);
-        // dispatch(setUsername(data.username));
-        // dispatch(setUserId(data.userId));
-        // onClose()
+        dispatch(setUsername(data.username));
+        dispatch(setUserId(data.userId));
+        onClose()
       } else {
         showToast("error", "", data.error);
       }
