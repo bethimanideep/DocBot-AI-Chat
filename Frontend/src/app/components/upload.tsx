@@ -30,15 +30,15 @@ const Upload = () => {
   const driveFilesRef = useRef(driveFiles);
   const dispatch = useDispatch();
   const uploadUrl = userId 
-  ? `https://docbot-ai-chat.onrender.com/upload?userId=${userId}` 
-  : `https://docbot-ai-chat.onrender.com/myuserupload?socketId=${socketId}`;
+  ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/upload?userId=${userId}` 
+  : `${process.env.NEXT_PUBLIC_BACKEND_URL}/myuserupload?socketId=${socketId}`;
 
   useEffect(() => {
     driveFilesRef.current = driveFiles;
   }, [driveFiles]);
   useEffect(() => {
     console.log("Before:", driveFiles);
-    const newSocket: any = io("https://docbot-ai-chat.onrender.com",{withCredentials:true});
+    const newSocket: any = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}`,{withCredentials:true});
     newSocket.on("connect", () => {
       dispatch(setSocketId(newSocket.id));
       console.log("Connected with socket ID:", newSocket.id);

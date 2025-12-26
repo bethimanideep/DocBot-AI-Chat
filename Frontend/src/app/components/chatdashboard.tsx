@@ -95,7 +95,7 @@ export const Chat = () => {
     let url: string;
     let body: any;
     if (!userId) {
-      url = "https://docbot-ai-chat.onrender.com/chat";
+      url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat`;
       body = {
         query,
         file_name: currentChatingFile || "Local Files",
@@ -103,14 +103,14 @@ export const Chat = () => {
       };
     } else {
       if (currentChatingFile === "Local Files" || currentChatingFile === "Gdrive") {
-        url = "https://docbot-ai-chat.onrender.com/userlocalfiles";
+        url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/userlocalfiles`;
         body = {
           query,
           userId,
           sourceType: currentChatingFile
         };
       } else {
-        url = "https://docbot-ai-chat.onrender.com/userfilechat";
+        url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/userfilechat`;
         body = {
           query,
           userId,

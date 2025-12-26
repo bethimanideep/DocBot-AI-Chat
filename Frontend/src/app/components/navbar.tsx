@@ -39,7 +39,9 @@ export default function Navbar() {
   const dispatch = useDispatch();
   const handleLogout = async () => {
     try {
-      const response = await fetch("https://docbot-ai-chat.onrender.com/auth/logout", {
+      console.log('Backend URL:', process.env.NEXT_PUBLIC_BACKEND_URL);
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/logout`, {
         method: "POST",
         credentials: "include", // Ensures cookies are included in the request
       });

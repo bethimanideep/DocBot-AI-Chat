@@ -9,7 +9,7 @@ const fetchDriveFiles = async () => {
     dispatch(setDriveLoading(true)); // Set loading state
 
     // Fetch files from the backend
-    const response = await fetch("https://docbot-ai-chat.onrender.com/auth/google/drive/files", {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google/drive/files`, {
       credentials: "include", // Include cookies for authentication
     });
 

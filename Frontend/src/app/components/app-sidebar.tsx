@@ -53,7 +53,7 @@ export function AppSidebar() {
       try {
         console.log("went");
         
-        const response = await fetch("https://docbot-ai-chat.onrender.com", {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}`, {
           method: "GET",
           credentials: "include", // Ensures cookies are included in the request
         });

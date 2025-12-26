@@ -29,7 +29,7 @@ export function LoginForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("https://docbot-ai-chat.onrender.com/auth/login", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: 'include',
@@ -57,7 +57,7 @@ export function LoginForm({
       alert("An error occurred. Please try again.");
     }
 
-    // const response = await fetch("https://docbot-ai-chat.onrender.com", {
+    // const response = await fetch("process.env.NEXT_PUBLIC_BACKEND_URL", {
     //   method: "GET",
     //   headers: { "Content-Type": "application/json" },
     //   credentials: 'include',
@@ -84,7 +84,7 @@ export function LoginForm({
                       className="w-full"
                       onClick={() =>
                         (window.location.href =
-                          "https://docbot-ai-chat.onrender.com/auth/google")
+                          `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google`)
                       }
                     >
                       <svg
