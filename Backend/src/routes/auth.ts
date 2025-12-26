@@ -76,6 +76,30 @@ router.get(
   }
 );
 
+// Return current authenticated user (reads cookies or session)
+router.get("/user", async (req: any, res: any) => {
+  try {
+    // Prefer session / passport user if available
+    if (req.user) {
+      const user = req.user as any;
+      return res.json({ username: user.displayName || user.username, userId: user._id });
+    }
+
+    // Fallback to cookies set in OAuth/login flows
+    const username = req.cookies?.username;
+    const userId = req.cookies?.userId;
+
+    if (username && userId) {
+      return res.json({ username, userId });
+    }
+
+    return res.status(401).json({ error: "Not authenticated" });
+  } catch (error) {
+    console.error("/auth/user error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Google Drive Connection (Additional Permissions)
 router.get(
   "/google/drive",

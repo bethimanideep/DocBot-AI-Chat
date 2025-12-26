@@ -20,25 +20,49 @@ export default function Home() {
   const dispatch = useDispatch();
 
   useEffect(() => {
-    const getCookie = (name: string) => {
-      return document.cookie
-        .split('; ')
-        .find((row) => row.startsWith(`${name}=`))
-        ?.split('=')[1];
-    };
-  
-    try {
-      const cookieUsername = getCookie('username');
-      const cookieUserId = getCookie('userId');
-  
-      if (cookieUsername && cookieUserId) {
-        dispatch(setUsername(decodeURIComponent(cookieUsername)));
-        dispatch(setUserId(decodeURIComponent(cookieUserId)));
+    // Try fetching current user from backend (works for OAuth flow where server sets cookies)
+    const fetchCurrentUser = async () => {
+      try {
+        const res = await fetch("https://docbot-ai-chat.onrender.com/auth/user", {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.username && data.userId) {
+            dispatch(setUsername(data.username));
+            dispatch(setUserId(data.userId));
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching current user:", error);
       }
-    } catch (error) {
-      console.error("Failed to read cookies:", error);
-      // Fallback: Handle error (e.g., show a toast)
-    }
+
+      // Fallback: try reading simple non-HttpOnly cookies on the frontend
+      try {
+        const getCookie = (name: string) => {
+          return document.cookie
+            .split('; ')
+            .find((row) => row.startsWith(`${name}=`))
+            ?.split('=')[1];
+        };
+
+        const cookieUsername = getCookie('username');
+        const cookieUserId = getCookie('userId');
+
+        if (cookieUsername && cookieUserId) {
+          dispatch(setUsername(decodeURIComponent(cookieUsername)));
+          dispatch(setUserId(decodeURIComponent(cookieUserId)));
+        }
+      } catch (err) {
+        console.error("Failed to read cookies fallback:", err);
+      }
+    };
+
+    fetchCurrentUser();
   }, [dispatch]);
   return (
     <main className="flex flex-col h-screen">
