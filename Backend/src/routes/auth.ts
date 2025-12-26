@@ -67,8 +67,13 @@ router.get(
         sameSite: "none", // For cross-domain requests
       });
 
-      // Redirect to your frontend or another desired route
-      res.redirect(String(process.env.FRONTEND_URL)); // Change this to the frontend URL or another route
+      // Create redirect URL with params
+      const frontendUrl = new URL(String(process.env.FRONTEND_URL));
+      frontendUrl.searchParams.append("username", encodeURIComponent(username));
+      frontendUrl.searchParams.append("userId", user._id.toString());
+
+      // Redirect to your frontend with params
+      res.redirect(frontendUrl.toString());
     } catch (error) {
       console.error(error);
       res.status(500).send("Internal Server Error");

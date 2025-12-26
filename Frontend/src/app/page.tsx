@@ -20,26 +20,46 @@ export default function Home() {
   const dispatch = useDispatch();
 
   useEffect(() => {
-    const getCookie = (name: string) => {
-      return document.cookie
-        .split('; ')
-        .find((row) => row.startsWith(`${name}=`))
-        ?.split('=')[1];
-    };
-  
-    try {
-      const cookieUsername = getCookie('username');
-      const cookieUserId = getCookie('userId');
-  
-      if (cookieUsername && cookieUserId) {
-        dispatch(setUsername(decodeURIComponent(cookieUsername)));
-        dispatch(setUserId(decodeURIComponent(cookieUserId)));
-      }
-    } catch (error) {
-      console.error("Failed to read cookies:", error);
-      // Fallback: Handle error (e.g., show a toast)
+  const getUrlParam = (name: string) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(name);
+  };
+
+  try {
+    // Check for URL parameters (from OAuth redirect)
+    const urlUsername = getUrlParam('username');
+    const urlUserId = getUrlParam('userId');
+
+    if (urlUsername && urlUserId) {
+      // Decode URL parameters
+      const decodedUsername = decodeURIComponent(urlUsername);
+      
+      // Dispatch to Redux store
+      dispatch(setUsername(decodedUsername));
+      dispatch(setUserId(urlUserId));
+
+      // Clear URL parameters from address bar
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+
+      console.log('User authenticated via URL parameters');
+      return;
     }
-  }, [dispatch]);
+
+    // If no URL parameters, check localStorage for existing session
+    const storedUsername = localStorage.getItem('username');
+    const storedUserId = localStorage.getItem('userId');
+
+    if (storedUsername && storedUserId) {
+      dispatch(setUsername(storedUsername));
+      dispatch(setUserId(storedUserId));
+      console.log('User authenticated from localStorage');
+    }
+
+  } catch (error) {
+    console.error("Failed to process authentication:", error);
+  }
+}, [dispatch]);
   return (
     <main className="flex flex-col h-screen">
 
