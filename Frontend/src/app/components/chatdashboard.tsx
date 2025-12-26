@@ -95,7 +95,7 @@ export const Chat = () => {
     let url: string;
     let body: any;
     if (!userId) {
-      url = "http://localhost:4000/chat";
+      url = "https://docbot-ai-chat.onrender.com/chat";
       body = {
         query,
         file_name: currentChatingFile || "Local Files",
@@ -103,14 +103,14 @@ export const Chat = () => {
       };
     } else {
       if (currentChatingFile === "Local Files" || currentChatingFile === "Gdrive") {
-        url = "http://localhost:4000/userlocalfiles";
+        url = "https://docbot-ai-chat.onrender.com/userlocalfiles";
         body = {
           query,
           userId,
           sourceType: currentChatingFile
         };
       } else {
-        url = "http://localhost:4000/userfilechat";
+        url = "https://docbot-ai-chat.onrender.com/userfilechat";
         body = {
           query,
           userId,

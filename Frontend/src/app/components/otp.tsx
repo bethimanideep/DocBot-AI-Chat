@@ -20,7 +20,7 @@ export function Otp({ email ,onClose}: any) {
   // Function to handle OTP verification
   const verifyOtp = async () => {
     try {
-      const response = await fetch("http://localhost:4000/auth/verify-otp", {
+      const response = await fetch("https://docbot-ai-chat.onrender.com/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp }),

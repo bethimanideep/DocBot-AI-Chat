@@ -10,7 +10,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: 'http://localhost:4000/auth/google/callback', // Full URL
+      callbackURL: 'https://docbot-ai-chat.onrender.com/auth/google/callback', // Full URL
       scope: ['profile', 'email'],
     },
     (accessToken, refreshToken, profile:any, done) => {
@@ -27,7 +27,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: 'http://localhost:4000/auth/google/drive/callback', // Full URL
+      callbackURL: 'https://docbot-ai-chat.onrender.com/auth/google/drive/callback', // Full URL
       scope: ['profile', 'email', 'https://www.googleapis.com/auth/drive.readonly'],
     },
     (accessToken, refreshToken, profile:any, done) => {

@@ -18,10 +18,10 @@ export const Welcome = () => {
   const userId = useSelector((state: RootState) => state.socket.userId);
   const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
   const uploadUrl = userId 
-  ? `http://localhost:4000/upload?userId=${userId}` 
-  : `http://localhost:4000/myuserupload?socketId=${socketId}`;
+  ? `https://docbot-ai-chat.onrender.com/upload?userId=${userId}` 
+  : `https://docbot-ai-chat.onrender.com/myuserupload?socketId=${socketId}`;
   useEffect(() => {
-    const newSocket: any = io("http://localhost:4000",{withCredentials:true});
+    const newSocket: any = io("https://docbot-ai-chat.onrender.com",{withCredentials:true});
     newSocket.on("connect", () => {
       dispatch(setSocketId(newSocket.id));
       console.log("Connected with socket ID:", newSocket.id);

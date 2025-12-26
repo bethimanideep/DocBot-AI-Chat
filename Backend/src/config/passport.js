@@ -11,7 +11,7 @@ const passport_google_oauth20_1 = require("passport-google-oauth20");
 passport_1.default.use('google-signin', new passport_google_oauth20_1.Strategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: 'http://localhost:4000/auth/google/callback', // Full URL
+    callbackURL: 'https://docbot-ai-chat.onrender.com/auth/google/callback', // Full URL
     scope: ['profile', 'email'],
 }, (accessToken, refreshToken, profile, done) => {
     profile.accessToken = accessToken;
@@ -21,7 +21,7 @@ passport_1.default.use('google-signin', new passport_google_oauth20_1.Strategy({
 passport_1.default.use('google-drive', new passport_google_oauth20_1.Strategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: 'http://localhost:4000/auth/google/drive/callback', // Full URL
+    callbackURL: 'https://docbot-ai-chat.onrender.com/auth/google/drive/callback', // Full URL
     scope: ['profile', 'email', 'https://www.googleapis.com/auth/drive.readonly'],
 }, (accessToken, refreshToken, profile, done) => {
     profile.accessToken = accessToken;

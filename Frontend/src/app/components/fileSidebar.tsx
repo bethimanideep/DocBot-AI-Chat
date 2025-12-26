@@ -71,7 +71,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   
     try {
       const response = await fetch(
-        `http://localhost:4000/gdrive/sync?fileId=${fileId}&userId=${userId}`,
+        `https://docbot-ai-chat.onrender.com/gdrive/sync?fileId=${fileId}&userId=${userId}`,
         {
           credentials: "include",
         }
@@ -101,7 +101,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
 
       // Fetch PDF files from Google Drive
       const response = await fetch(
-        `http://localhost:4000/auth/google/drive/files?userId=${userId}`,
+        `https://docbot-ai-chat.onrender.com/auth/google/drive/files?userId=${userId}`,
         {
           credentials: "include", // Include cookies for authentication
         }
@@ -126,7 +126,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const initiateGoogleDriveAuth = () => {
     // Redirect to authenticate Google Drive
     window.location.href =
-      "http://localhost:4000/auth/google/drive?redirect=true";
+      "https://docbot-ai-chat.onrender.com/auth/google/drive?redirect=true";
   };
   const startDragging = (event: React.MouseEvent) => {
     isDragging.current = true;

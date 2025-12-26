@@ -39,7 +39,7 @@ export default function Navbar() {
   const dispatch = useDispatch();
   const handleLogout = async () => {
     try {
-      const response = await fetch("http://localhost:4000/auth/logout", {
+      const response = await fetch("https://docbot-ai-chat.onrender.com/auth/logout", {
         method: "POST",
         credentials: "include", // Ensures cookies are included in the request
       });
