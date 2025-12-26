@@ -13,7 +13,7 @@ const router = Router();
 // Google Sign-In (Basic Profile and Email)
 router.get(
   "/google",
-  passport.authenticate("google-signin", { scope: ["profile", "email"]  ,prompt:"select_account"})
+  passport.authenticate("google-signin", { scope: ["profile", "email"], prompt: "select_account" })
 );
 
 // Google Sign-In Callback
@@ -26,7 +26,7 @@ router.get(
       const userEmail = userProfile.emails[0].value; // Accessing user's email
       const username = userProfile.displayName;
       const accessToken = userProfile.accessToken; // Access token from Google
-      
+
       // Check if the user already exists in MongoDB
       let user = await User.findOne({ email: userEmail });
       if (!user) {
@@ -54,7 +54,7 @@ router.get(
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
       });
-      
+
       // Set tokens in cookies
       res.cookie("token", token, {
         httpOnly: true,
@@ -67,8 +67,10 @@ router.get(
         sameSite: "none", // For cross-domain requests
       });
 
-      // Redirect to your frontend or another desired route
-      res.redirect(String(process.env.FRONTEND_REDIRECT_URL)); // Change this to the frontend URL or another route
+      // Redirect to frontend with user data in URL parameters
+      const frontendUrl = new URL(String(process.env.FRONTEND_REDIRECT_URL));
+      frontendUrl.searchParams.set("username", encodeURIComponent(username));
+      frontendUrl.searchParams.set("userId", user._id.toString());
     } catch (error) {
       console.error(error);
       res.status(500).send("Internal Server Error");
@@ -76,29 +78,9 @@ router.get(
   }
 );
 
-// Return current authenticated user (reads cookies or session)
-router.get("/user", async (req: any, res: any) => {
-  try {
-    // Prefer session / passport user if available
-    if (req.user) {
-      const user = req.user as any;
-      return res.json({ username: user.displayName || user.username, userId: user._id });
-    }
-
-    // Fallback to cookies set in OAuth/login flows
-    const username = req.cookies?.username;
-    const userId = req.cookies?.userId;
-
-    if (username && userId) {
-      return res.json({ username, userId });
-    }
-
-    return res.status(401).json({ error: "Not authenticated" });
-  } catch (error) {
-    console.error("/auth/user error:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
+// NOTE: We intentionally removed the /user endpoint. The OAuth flow now
+// redirects to the frontend with username and userId as query params so the
+// frontend can store them in localStorage and update client-side state.
 
 // Google Drive Connection (Additional Permissions)
 router.get(
@@ -107,25 +89,25 @@ router.get(
 );
 
 // Google Drive Callback
-router.get("/google/drive/callback",passport.authenticate("google-drive", { failureRedirect: "/" }),async (req, res) => {
-    try {
-      const userProfile = req.user as any; // Keeping profile type as any
-      const accessToken = userProfile.accessToken; // Access token from Google
+router.get("/google/drive/callback", passport.authenticate("google-drive", { failureRedirect: "/" }), async (req, res) => {
+  try {
+    const userProfile = req.user as any; // Keeping profile type as any
+    const accessToken = userProfile.accessToken; // Access token from Google
 
-      // Update the access token in cookies
-      res.cookie("driveAccessToken", accessToken, {
-        httpOnly: true,
-        secure: true, // Use HTTPS in production
-        sameSite: "none", // For cross-domain requests
-      });
+    // Update the access token in cookies
+    res.cookie("driveAccessToken", accessToken, {
+      httpOnly: true,
+      secure: true, // Use HTTPS in production
+      sameSite: "none", // For cross-domain requests
+    });
 
-      // Redirect to your frontend or another desired route
-      res.redirect(String(process.env.FRONTEND_REDIRECT_URL)); // Change this to the frontend URL or another route
-    } catch (error) {
-      console.error(error);
-      res.status(500).send("Internal Server Error");
-    }
+    // Redirect to your frontend or another desired route
+    res.redirect(String(process.env.FRONTEND_REDIRECT_URL)); // Change this to the frontend URL or another route
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Internal Server Error");
   }
+}
 );
 
 router.get("/google/drive/files", async (req: any, res: any) => {
@@ -190,7 +172,7 @@ router.get("/google/drive/files", async (req: any, res: any) => {
 });
 
 // Email/Password Login
-router.post("/login", async (req:any, res:any) => {
+router.post("/login", async (req: any, res: any) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -199,7 +181,7 @@ router.post("/login", async (req:any, res:any) => {
 
   try {
     let user = await User.findOne({ email, authenticationType: "email" }).select("+password");
-    const username=email.split("@")[0];
+    const username = email.split("@")[0];
     // If user does not exist, create new and send OTP
     if (!user) {
       const hashedPassword = await hashPassword(password);
@@ -237,8 +219,8 @@ router.post("/login", async (req:any, res:any) => {
       process.env.JWT_SECRET!,
       { expiresIn: "7d" }
     );
-    console.log(token,refreshToken);
-    
+    console.log(token, refreshToken);
+
 
     // Set tokens in cookies
     res.cookie("token", token, {
@@ -251,9 +233,9 @@ router.post("/login", async (req:any, res:any) => {
       secure: true,
       sameSite: "none",
     });
-    const fileList = await UserFile.find({ userId:user._id });
+    const fileList = await UserFile.find({ userId: user._id });
 
-    return res.status(200).json({ message: "Login Successful", username: user.username || email.split("@")[0] ,userId:user._id,fileList});
+    return res.status(200).json({ message: "Login Successful", username: user.username || email.split("@")[0], userId: user._id, fileList });
   } catch (error) {
     console.error("Error in /login:", error);
     return res.status(500).json({ error: "Internal server error" });
@@ -261,7 +243,7 @@ router.post("/login", async (req:any, res:any) => {
 });
 
 // Verify OTP
-router.post("/verify-otp", async (req:any, res:any) => {
+router.post("/verify-otp", async (req: any, res: any) => {
   const { email, otp } = req.body;
 
   if (!email || !otp) {
@@ -297,7 +279,7 @@ router.post("/verify-otp", async (req:any, res:any) => {
         process.env.JWT_SECRET!,
         { expiresIn: "7d" }
       );
-      console.log(token,refreshToken);
+      console.log(token, refreshToken);
 
       // Set tokens in cookies
       res.cookie("token", token, {
@@ -311,7 +293,7 @@ router.post("/verify-otp", async (req:any, res:any) => {
         sameSite: "none",
       });
 
-      return res.status(200).json({ message: "Login Successful", username: user.username || email.split("@")[0] ,userId:user._id});
+      return res.status(200).json({ message: "Login Successful", username: user.username || email.split("@")[0], userId: user._id });
     } else {
       return res.status(400).json({ error: "Invalid or expired OTP" });
     }
@@ -322,7 +304,7 @@ router.post("/verify-otp", async (req:any, res:any) => {
 });
 
 // Logout
-router.post("/logout", (req:any, res:any) => {
+router.post("/logout", (req: any, res: any) => {
   res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "none" });
   res.clearCookie("refreshToken", { httpOnly: true, secure: true, sameSite: "none" });
   res.clearCookie("driveAccessToken", { httpOnly: true, secure: true, sameSite: "none" });

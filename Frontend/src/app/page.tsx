@@ -5,7 +5,6 @@ import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "./components/reduxtoolkit/store";
 import { Welcome } from "./components/welcome";
 import { Chat } from "./components/chatdashboard";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { AdjustableFileSidebar } from "./components/AdjustableFileSidebar";
 import { FileSidebar } from "./components/fileSidebar";
 import { setUserId, setUsername } from "./components/reduxtoolkit/socketSlice";
@@ -20,53 +19,46 @@ export default function Home() {
   const dispatch = useDispatch();
 
   useEffect(() => {
-    // Try fetching current user from backend (works for OAuth flow where server sets cookies)
-    const fetchCurrentUser = async () => {
+    // Check for user data in localStorage
+    const userData = localStorage.getItem("userData");
+    
+    if (userData) {
       try {
-        const res = await fetch("https://docbot-ai-chat.onrender.com/auth/user", {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.username && data.userId) {
-            dispatch(setUsername(data.username));
-            dispatch(setUserId(data.userId));
-            return;
-          }
+        const parsedData = JSON.parse(userData);
+        if (parsedData.username && parsedData.userId) {
+          dispatch(setUsername(parsedData.username));
+          dispatch(setUserId(parsedData.userId));
+          return;
         }
       } catch (error) {
-        console.error("Error fetching current user:", error);
+        console.error("Error parsing user data from localStorage:", error);
       }
+    }
 
-      // Fallback: try reading simple non-HttpOnly cookies on the frontend
-      try {
-        const getCookie = (name: string) => {
-          return document.cookie
-            .split('; ')
-            .find((row) => row.startsWith(`${name}=`))
-            ?.split('=')[1];
-        };
+    // Fallback: Check URL parameters for OAuth callback data
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlUsername = searchParams.get("username");
+    const urlUserId = searchParams.get("userId");
 
-        const cookieUsername = getCookie('username');
-        const cookieUserId = getCookie('userId');
-
-        if (cookieUsername && cookieUserId) {
-          dispatch(setUsername(decodeURIComponent(cookieUsername)));
-          dispatch(setUserId(decodeURIComponent(cookieUserId)));
-        }
-      } catch (err) {
-        console.error("Failed to read cookies fallback:", err);
-      }
-    };
-
-    fetchCurrentUser();
+    if (urlUsername && urlUserId) {
+      // Save to localStorage
+      const userData = {
+        username: urlUsername,
+        userId: urlUserId
+      };
+      localStorage.setItem("userData", JSON.stringify(userData));
+      
+      dispatch(setUsername(urlUsername));
+      dispatch(setUserId(urlUserId));
+      
+      // Clean up URL parameters
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
   }, [dispatch]);
+
   return (
     <main className="flex flex-col h-screen">
-
       <Navbar />
       <div className="flex-1 flex">
         {!username && uploadedFiles.length === 0 ? (
