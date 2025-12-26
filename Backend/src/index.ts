@@ -96,9 +96,10 @@ const client = createClient({
 client.on("error", (err) => console.log("Redis Client Error", err));
 
 const app = express();
+const allowedOrigins = process.env.CORS?.split(",");
 app.use(
   cors({
-    origin: process.env.CORS, // Explicitly allow frontend URL
+    origin: allowedOrigins, // Explicitly allow frontend URL
     credentials: true, // Allow cookies and authentication headers
   })
 );
@@ -118,7 +119,7 @@ app.use("/auth", router);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CORS,
+    origin: allowedOrigins,
     credentials: true,
   },
 });
