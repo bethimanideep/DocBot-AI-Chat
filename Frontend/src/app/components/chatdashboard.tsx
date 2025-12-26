@@ -52,6 +52,40 @@ export const Chat = () => {
     };
   }, []);
 
+  // Reset messages when the selected file changes so previous conversation
+  // doesn't persist when switching to a new file
+  useEffect(() => {
+    // If no file selected, keep default welcome message
+    if (!currentChatingFile) {
+      setMessages([
+        {
+          id: 1,
+          text: "Hello! Ask me anything about your document.",
+          sender: "other",
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      setNewMessage("");
+      return;
+    }
+
+    // Reset to welcome message when file changes
+    setMessages([
+      {
+        id: Date.now(),
+        text: `Ready to chat about ${currentChatingFile}. Ask me anything!`,
+        sender: "other",
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+    setNewMessage("");
+    // Abort any ongoing request tied to previous file
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, [currentChatingFile]);
+
   const handleStreamingResponse = async (query: string) => {
     if(currentChatingFile==null){
       showToast("warning", "", "Select Any File To Chat");

@@ -1,18 +1,16 @@
 import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatGroq } from "@langchain/groq";
 import multer from "multer";
 import pdfParse from "pdf-parse";
 import { TokenTextSplitter } from "@langchain/textsplitters";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import session from "express-session";
-import { v4 as uuidv4 } from "uuid";
 import mongoose from "mongoose";
-import { RetrievalQAChain } from "langchain/chains";
+import { RetrievalQAChain } from "@langchain/classic/chains";
 import { createClient } from "redis";
-import { Document } from "@langchain/core/documents";
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
 import { WeaviateStore } from "@langchain/weaviate";
 import cors from "cors";
 import { Server } from "socket.io";
@@ -24,19 +22,66 @@ import cookieParser from "cookie-parser";
 import { GoogleDriveFile, User, UserFile } from "./models/schema";
 import { google } from "googleapis";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import OpenAI from 'openai';
+import { Document } from "@langchain/core/documents";
+import { BaseRetriever } from "@langchain/core/retrievers";
+import { CallbackManagerForRetrieverRun } from "@langchain/core/callbacks/manager";
 
 const userRetrievers: any = {};
 
+// Minimal retriever wrapper to satisfy LangChain's BaseRetriever interface
+class FunctionalRetriever extends BaseRetriever {
+  lc_namespace = ["docbot", "functional_retriever"];
+
+  constructor(
+    private fetcher: (
+      query: string,
+      runManager?: CallbackManagerForRetrieverRun
+    ) => Promise<Document[]>
+  ) {
+    super();
+  }
+
+  async _getRelevantDocuments(
+    query: string,
+    runManager?: CallbackManagerForRetrieverRun
+  ): Promise<Document[]> {
+    return this.fetcher(query, runManager);
+  }
+}
+
 // Initialize OpenAI embeddings model
-const embeddings = new OpenAIEmbeddings({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: "text-embedding-ada-002",
+// const embeddings = new OpenAIEmbeddings({
+//   apiKey: process.env.OPENAI_API_KEY,
+//   model: "text-embedding-3-small",
+// });
+
+
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { TaskType } from "@google/generative-ai";
+
+const embeddings = new GoogleGenerativeAIEmbeddings({
+  apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY,
+  model: "gemini-embedding-001", // 768 dimensions
+  taskType: TaskType.RETRIEVAL_DOCUMENT,
+  title: "Document title",
 });
+
+
 // The Weaviate SDK has an issue with types
+// const weaviateClient = weaviate.client({
+//   scheme: "http",
+//   host: "localhost:8080",
+// });
+
+const weaviateApiKey = process.env.WEAVIATE_API_KEY;
+if (!weaviateApiKey) {
+  throw new Error("WEAVIATE_API_KEY environment variable is required");
+}
+
 const weaviateClient = weaviate.client({
-  scheme: "http",
-  host: "localhost:8080",
+  scheme: "https",
+  host: "xnc212pktecl2ed0bohvig.c0.asia-southeast1.gcp.weaviate.cloud",
+  apiKey: new weaviate.ApiKey(weaviateApiKey),
 });
 
 const client = createClient({
@@ -238,10 +283,28 @@ io.on("connection", async (socket) => {
   });
 });
 
-const llm = new ChatOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: "gpt-3.5-turbo",
-});
+// Use an environment-configurable model name to avoid hardcoding a model that may be
+// decommissioned. Set GROQ_MODEL in your environment to a supported model name.
+// NOTE: We require an explicit GROQ_MODEL to avoid accidental use of an invalid
+// default that may not exist or be accessible for your account.
+const GROQ_MODEL = process.env.GROQ_MODEL;
+if (!GROQ_MODEL) {
+  throw new Error(
+    "Environment variable GROQ_MODEL is required. Set GROQ_MODEL to a supported Groq model (see your Groq console or docs). Example: GROQ_MODEL=groq-<version>"
+  );
+}
+
+function createChatGroq(opts?: { streaming?: boolean; callbacks?: any[] }) {
+  return new ChatGroq({
+    apiKey: process.env.GROQ_API_KEY,
+    model: GROQ_MODEL!,
+    temperature: 0,
+    streaming: opts?.streaming,
+    callbacks: opts?.callbacks,
+  });
+}
+
+const llm = createChatGroq();
 
 // Multer setup for handling file uploads in memory
 const storage = multer.memoryStorage();
@@ -484,7 +547,7 @@ app.post("/search", async (req: any, res: any) => {
     }
 
     const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient, // Weaviate client instance
+      client: weaviateClient as any, // Weaviate client instance
       indexName: "Cwd", // Replace with your Weaviate class name
       metadataKeys: ["file_name"], // Include metadata fields you want to retrieve
       textKey: "text", // The property in Weaviate that contains the text
@@ -526,30 +589,45 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
     res.flushHeaders();
 
     const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient,
+      client: weaviateClient as any,
       indexName: "Cwd",
       metadataKeys: ["file_name", "fileId", "timestamp"],
       textKey: "text",
     });
 
-    // Apply filtering inside the retriever
-    const retriever = vectorStore.asRetriever({
-      k: 1, // Set the number of documents to return
-      filter: {
-        where: {
-          operator: "And",
-          operands: [
-            { path: ["userId"], operator: "Equal", valueText: userId },
-            { path: ["sourceType"], operator: "Equal", valueText: `${sourceType}` },
-          ],
+    // Create a custom retriever with filter support
+    const retriever = new FunctionalRetriever(async (query: string) => {
+      const queryEmbedding = await embeddings.embedQuery(query);
+      const whereFilter = {
+        operator: "And" as const,
+        operands: [
+          { path: ["userId"], operator: "Equal" as const, valueText: userId },
+          { path: ["sourceType"], operator: "Equal" as const, valueText: `${sourceType}` },
+        ],
+      };
+      // Query Weaviate directly with filter and vector search
+      const result = await weaviateClient.graphql
+        .get()
+        .withClassName("Cwd")
+        .withFields("text file_name fileId timestamp _additional { id distance }")
+        .withWhere(whereFilter)
+        .withNearVector({ vector: queryEmbedding })
+        .withLimit(1)
+        .do();
+      
+      const documents = result.data?.Get?.Cwd || [];
+      return documents.map((doc: any) => new Document({
+        pageContent: doc.text,
+        metadata: {
+          file_name: doc.file_name,
+          fileId: doc.fileId,
+          timestamp: doc.timestamp,
         },
-      },
+      }));
     });
 
-    // Create a streaming LLM instance
-    const streamingLLM = new ChatOpenAI({
-      model: "gpt-4",
-      temperature: 0,
+    // Create a streaming LLM instance using the centralized helper
+    const streamingLLM = createChatGroq({
       streaming: true,
       callbacks: [
         {
@@ -603,29 +681,43 @@ app.post("/userfilechat", async (req: any, res: any) => {
     res.flushHeaders(); // Important for SSE
 
     const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient,
+      client: weaviateClient as any,
       indexName: "Cwd",
       metadataKeys: ["file_name", "fileId", "timestamp"],
       textKey: "text",
     });
 
-    // Apply filtering inside the retriever
-    const retriever = vectorStore.asRetriever({
-      k: 1,
-      filter: {
-        where: {
-          operator: "And",
-          operands: [
-            { path: ["fileId"], operator: "Equal", valueText: fileId },
-          ],
+    // Create a custom retriever with filter support
+    const retriever = new FunctionalRetriever(async (query: string) => {
+      const queryEmbedding = await embeddings.embedQuery(query);
+      const whereFilter = {
+        path: ["fileId"],
+        operator: "Equal" as const,
+        valueText: fileId,
+      };
+      // Query Weaviate directly with filter and vector search
+      const result = await weaviateClient.graphql
+        .get()
+        .withClassName("Cwd")
+        .withFields("text file_name fileId timestamp _additional { id distance }")
+        .withWhere(whereFilter)
+        .withNearVector({ vector: queryEmbedding })
+        .withLimit(1)
+        .do();
+      
+      const documents = result.data?.Get?.Cwd || [];
+      return documents.map((doc: any) => new Document({
+        pageContent: doc.text,
+        metadata: {
+          file_name: doc.file_name,
+          fileId: doc.fileId,
+          timestamp: doc.timestamp,
         },
-      },
+      }));
     });
 
-    // Create a streaming LLM instance
-    const streamingLLM = new ChatOpenAI({
-      model: "gpt-4",
-      temperature: 0,
+    // Create a streaming LLM instance using the centralized helper
+    const streamingLLM = createChatGroq({
       streaming: true,
       callbacks: [
         {
@@ -1020,16 +1112,14 @@ app.post("/chat", async (req: any, res: any) => {
         return res.status(400).json({ error: "No stored vector files found." });
       }
 
-      retriever = {
-        async getRelevantDocuments(query: any) {
-          const results = await Promise.all(
-            vectorStores.map((store: any) =>
-              store.asRetriever({ k: 1 }).getRelevantDocuments(query)
-            )
-          );
-          return results.flat();
-        },
-      };
+      retriever = new FunctionalRetriever(async (query: string) => {
+        const results = await Promise.all(
+          vectorStores.map((store: any) =>
+            store.asRetriever({ k: 1 }).invoke(query)
+          )
+        );
+        return results.flat();
+      });
     } else {
       retriever = userFiles[file_name].vectorStore.asRetriever({ k: 1 });
     }
@@ -1040,10 +1130,8 @@ app.post("/chat", async (req: any, res: any) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    // Streaming LLM with callbacks
-    const streamingLLM = new ChatOpenAI({
-      model: "gpt-4",
-      temperature: 0,
+    // Streaming LLM with callbacks (centralized helper)
+    const streamingLLM = createChatGroq({
       streaming: true,
       callbacks: [
         {
