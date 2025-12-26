@@ -14,7 +14,7 @@ passport.use(
       scope: ['profile', 'email'],
     },
     (accessToken, refreshToken, profile:any, done) => {
-      profile.accessToken = accessToken;
+      profile.GoogleaccessToken = accessToken;
       done(null, profile);
     }
   )
@@ -31,7 +31,7 @@ passport.use(
       scope: ['profile', 'email', 'https://www.googleapis.com/auth/drive.readonly'],
     },
     (accessToken, refreshToken, profile:any, done) => {
-      profile.accessToken = accessToken;
+      profile.DriveAccessToken = accessToken;
       done(null, profile);
     }
   )

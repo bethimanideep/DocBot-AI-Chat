@@ -24,6 +24,7 @@ import { google } from "googleapis";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
+import * as cookie from 'cookie';
 import { CallbackManagerForRetrieverRun } from "@langchain/core/callbacks/manager";
 
 const userRetrievers: any = {};
@@ -137,17 +138,18 @@ io.on("connection", async (socket) => {
   });
 
   // Extract cookies manually from socket handshake headers
-  const cookies = socket.handshake.headers.cookie;
-  let accessToken = null;
+   const cookies :any= socket.handshake.headers.cookie;
+  let DriveAccessToken = null;
   let userToken = null;
+  const parsedCookies = cookie.parse(cookies);
+  console.log(parsedCookies);
+  
+  
 
-  if (cookies) {
-    const parsedCookies = Object.fromEntries(
-      cookies.split("; ").map((c) => c.split("="))
-    );
-    accessToken = parsedCookies.driveAccessToken; // Google Drive Access Token
+  if (parsedCookies) {
+    DriveAccessToken = parsedCookies.DriveAccessToken; // Google Drive Access Token
     userToken = parsedCookies.token; // User JWT Token
-    console.log({ accessToken, userToken });
+    console.log({ DriveAccessToken, userToken });
   }
 
   if (!userToken) {
@@ -182,8 +184,8 @@ io.on("connection", async (socket) => {
     socket.emit("initialFileList", { error: "Invalid or expired token" });
   }
 
-  // Fetch Drive files if accessToken exists
-  if (accessToken) {
+  // Fetch Drive files if DriveAccessToken exists
+  if (DriveAccessToken) {
     try {
       // Verify JWT token again to get userId
       const decoded = jwt.verify(userToken, process.env.JWT_SECRET!) as JwtPayload;
@@ -191,7 +193,7 @@ io.on("connection", async (socket) => {
 
       // Initialize OAuth2 client with access token
       const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
+      oauth2Client.setCredentials({ access_token: DriveAccessToken });
 
       // Create Google Drive API client
       const drive = google.drive({ version: "v3", auth: oauth2Client });

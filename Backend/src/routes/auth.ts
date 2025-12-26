@@ -25,7 +25,7 @@ router.get(
       const userProfile = req.user as any; // Keeping profile type as any
       const userEmail = userProfile.emails[0].value; // Accessing user's email
       const username = userProfile.displayName;
-      const accessToken = userProfile.accessToken; // Access token from Google
+      const GoogleaccessToken = userProfile.GoogleaccessToken; // Access token from Google
       
       // Check if the user already exists in MongoDB
       let user = await User.findOne({ email: userEmail });
@@ -61,7 +61,7 @@ router.get(
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
       });
-      res.cookie("accessToken", accessToken, {
+      res.cookie("GoogleaccessToken", GoogleaccessToken, {
         httpOnly: true,
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
@@ -91,10 +91,10 @@ router.get(
 router.get("/google/drive/callback",passport.authenticate("google-drive", { failureRedirect: "/" }),async (req, res) => {
     try {
       const userProfile = req.user as any; // Keeping profile type as any
-      const accessToken = userProfile.accessToken; // Access token from Google
+      const DriveAccessToken = userProfile.DriveAccessToken; // Access token from Google
 
       // Update the access token in cookies
-      res.cookie("driveAccessToken", accessToken, {
+      res.cookie("DriveAccessToken", DriveAccessToken, {
         httpOnly: true,
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
@@ -111,10 +111,9 @@ router.get("/google/drive/callback",passport.authenticate("google-drive", { fail
 
 router.get("/google/drive/files", async (req: any, res: any) => {
   try {
-    const accessToken = req.cookies.driveAccessToken;
     const userId = req.user?._id; // Assuming user is authenticated and userId is available
 
-    if (!accessToken) {
+    if (!req.cookies.DriveAccessToken) {
       return res.status(401).json({ error: "Unauthorized: No access token provided" });
     }
 
@@ -123,7 +122,7 @@ router.get("/google/drive/files", async (req: any, res: any) => {
     }
 
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({ access_token: req.cookies.DriveAccessToken });
 
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
@@ -306,7 +305,7 @@ router.post("/verify-otp", async (req:any, res:any) => {
 router.post("/logout", (req:any, res:any) => {
   res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "none" });
   res.clearCookie("refreshToken", { httpOnly: true, secure: true, sameSite: "none" });
-  res.clearCookie("driveAccessToken", { httpOnly: true, secure: true, sameSite: "none" });
+  res.clearCookie("DriveAccessToken", { httpOnly: true, secure: true, sameSite: "none" });
 
   return res.status(200).json({ message: "Logout successful" });
 });

@@ -35,6 +35,7 @@
     "@langchain/openai": "^1.2.0",
     "@langchain/textsplitters": "^1.0.1",
     "@langchain/weaviate": "^1.0.1",
+    "cookie": "^1.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
