@@ -68,7 +68,7 @@ router.get(
       });
 
       // Redirect to your frontend or another desired route
-      res.redirect("http://localhost:3000"); // Change this to the frontend URL or another route
+      res.redirect(String(process.env.FRONTEND_REDIRECT_URL)); // Change this to the frontend URL or another route
     } catch (error) {
       console.error(error);
       res.status(500).send("Internal Server Error");
@@ -96,7 +96,7 @@ router.get("/google/drive/callback",passport.authenticate("google-drive", { fail
       });
 
       // Redirect to your frontend or another desired route
-      res.redirect("http://localhost:3000"); // Change this to the frontend URL or another route
+      res.redirect(String(process.env.FRONTEND_REDIRECT_URL)); // Change this to the frontend URL or another route
     } catch (error) {
       console.error(error);
       res.status(500).send("Internal Server Error");
