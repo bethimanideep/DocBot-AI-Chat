@@ -106,22 +106,13 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
-app.set("trust proxy", 1); // important on Render behind proxy
-
 app.use(
   session({
-    secret: process.env.JWT_SECRET!,
+    secret: `${process.env.JWT_SECRET}`,
     resave: false,
-    saveUninitialized: false,
-    cookie: {
-      sameSite: "none",   // allow cross-site
-      secure: true,       // required when SameSite=None in browsers
-      httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 7, // example: 7 days
-    },
+    saveUninitialized: true,
   })
 );
-
 app.use(passport.initialize());
 app.use(passport.session());
 app.use("/auth", router);
@@ -132,7 +123,6 @@ const io = new Server(server, {
     origin: allowedOrigins,
     credentials: true,
   },
-  transports: ["websocket"]
 });
 io.on("connection", async (socket) => {
   console.log("New client connected");
