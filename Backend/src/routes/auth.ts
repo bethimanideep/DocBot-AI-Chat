@@ -46,11 +46,13 @@ router.get(
       });
       res.cookie("username", username, {
         httpOnly: false,
+        partitioned: true,
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
       });
       res.cookie("userId", user._id.toString(), {
         httpOnly: false,
+        partitioned: true,
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
       });
@@ -58,11 +60,13 @@ router.get(
       // Set tokens in cookies
       res.cookie("token", token, {
         httpOnly: true,
+        partitioned: true,
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
       });
       res.cookie("GoogleaccessToken", GoogleaccessToken, {
         httpOnly: true,
+        partitioned: true,
         secure: true, // Use HTTPS in production
         sameSite: "none", // For cross-domain requests
       });
@@ -224,11 +228,13 @@ router.post("/login", async (req:any, res:any) => {
     // Set tokens in cookies
     res.cookie("token", token, {
       httpOnly: true,
+      partitioned: true,
       secure: true,
       sameSite: "none",
     });
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
+      partitioned: true,
       secure: true,
       sameSite: "none",
     });
@@ -283,11 +289,13 @@ router.post("/verify-otp", async (req:any, res:any) => {
       // Set tokens in cookies
       res.cookie("token", token, {
         httpOnly: true,
+        partitioned: true,
         secure: true,
         sameSite: "none",
       });
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
+        partitioned: true,
         secure: true,
         sameSite: "none",
       });
