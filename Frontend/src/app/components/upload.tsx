@@ -38,7 +38,7 @@ const Upload = () => {
   }, [driveFiles]);
   useEffect(() => {
     console.log("Before:", driveFiles);
-    const newSocket: any = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}`,{withCredentials:true});
+    const newSocket: any = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}`,{withCredentials:true,transports: ["websocket"]});
     newSocket.on("connect", () => {
       dispatch(setSocketId(newSocket.id));
       console.log("Connected with socket ID:", newSocket.id);

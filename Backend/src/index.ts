@@ -132,6 +132,7 @@ const io = new Server(server, {
     origin: allowedOrigins,
     credentials: true,
   },
+  transports: ["websocket"]
 });
 io.on("connection", async (socket) => {
   console.log("New client connected");
