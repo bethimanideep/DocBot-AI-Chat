@@ -112,7 +112,8 @@ router.get("/google/drive/callback",passport.authenticate("google-drive", { fail
 router.get("/google/drive/files", async (req: any, res: any) => {
   try {
     const userId = req.user?._id; // Assuming user is authenticated and userId is available
-
+    console.log({cookies:req.cookies});
+    
     if (!req.cookies.DriveAccessToken) {
       return res.status(401).json({ error: "Unauthorized: No access token provided" });
     }
