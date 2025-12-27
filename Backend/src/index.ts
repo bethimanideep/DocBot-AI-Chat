@@ -100,7 +100,7 @@ const app = express();
 const allowedOrigins = process.env.CORS?.split(",");
 app.use(
   cors({
-    origin: allowedOrigins, // Explicitly allow frontend URL
+    origin: true, // Explicitly allow frontend URL
     credentials: true, // Allow cookies and authentication headers
   })
 );
@@ -120,7 +120,7 @@ app.use("/auth", router);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: true,
     credentials: true,
   },
 });

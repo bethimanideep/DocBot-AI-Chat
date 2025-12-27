@@ -45,30 +45,18 @@ router.get(
         expiresIn: "1h",
       });
       res.cookie("username", username, {
-        httpOnly: false,
-        partitioned: true,
-        secure: true, // Use HTTPS in production
-        sameSite: "none", // For cross-domain requests
+       httpOnly: false, secure: true, sameSite: "none", partitioned: true
       });
       res.cookie("userId", user._id.toString(), {
-        httpOnly: false,
-        partitioned: true,
-        secure: true, // Use HTTPS in production
-        sameSite: "none", // For cross-domain requests
+        httpOnly: false, secure: true, sameSite: "none", partitioned: true
       });
       
       // Set tokens in cookies
       res.cookie("token", token, {
-        httpOnly: true,
-        partitioned: true,
-        secure: true, // Use HTTPS in production
-        sameSite: "none", // For cross-domain requests
+       httpOnly: false, secure: true, sameSite: "none", partitioned: true
       });
       res.cookie("GoogleaccessToken", GoogleaccessToken, {
-        httpOnly: true,
-        partitioned: true,
-        secure: true, // Use HTTPS in production
-        sameSite: "none", // For cross-domain requests
+        httpOnly: false, secure: true, sameSite: "none", partitioned: true
       });
 
       // Create redirect URL with params
