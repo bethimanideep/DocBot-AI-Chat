@@ -36,14 +36,40 @@ const Upload = () => {
   useEffect(() => {
     driveFilesRef.current = driveFiles;
   }, [driveFiles]);
-  useEffect(() => {
-    console.log("Before:", driveFiles);
-    const newSocket: any = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}`,{withCredentials:true,transports: ["websocket"]});
+ useEffect(() => {
+  console.log("Before:", driveFiles);
+
+  // Request storage access before connecting to socket
+  const requestStorage = async () => {
+    // Check if Storage Access API is supported
+    if (typeof document.hasStorageAccess === 'function') {
+      try {
+        const hasAccess = await document.hasStorageAccess();
+        if (!hasAccess) {
+          await document.requestStorageAccess();
+          console.log("Storage access granted");
+        } else {
+          console.log("Storage access already granted");
+        }
+      } catch (error) {
+        console.error("Storage access denied:", error);
+      }
+    } else {
+      console.log("Storage Access API not supported");
+    }
+  };
+
+  requestStorage().then(() => {
+    const newSocket: any = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}`, {
+      withCredentials: true,
+      transports: ["websocket"],
+    });
+
     newSocket.on("connect", () => {
       dispatch(setSocketId(newSocket.id));
       console.log("Connected with socket ID:", newSocket.id);
-      console.log({userId});
-      
+      console.log({ userId });
+
       // Join room after connection is established
       if (userId) {
         newSocket.emit('joinRoom', userId);
@@ -56,44 +82,43 @@ const Upload = () => {
       dispatch(setProgress(message));
     });
 
-    newSocket.on('fileSyncStatusUpdate', ({ fileId, synced ,_id}: FileSyncCompleteEvent) => {
-      console.log("received response")
-     
-      
+    newSocket.on('fileSyncStatusUpdate', ({ fileId, synced, _id }: FileSyncCompleteEvent) => {
+      console.log("received response");
+
       const updatedFiles = driveFilesRef.current.map((f: any) =>
-        f.id === fileId ? { ...f, synced ,_id} : f
+        f.id === fileId ? { ...f, synced, _id } : f
       );
       dispatch(setDriveFiles(updatedFiles));
-      
-      
+
       showToast("success", "Sync Complete", `Sync Completed successfully`);
     });
+
     newSocket.on("driveFilesResponse", (data: any) => {
       if (data.error) {
         console.log(data.error);
-        
       } else {
-        if(data.pdfFiles.length>0)dispatch(setCurrentChatingFile("Gdrive"));
+        if (data.pdfFiles.length > 0) dispatch(setCurrentChatingFile("Gdrive"));
         dispatch(setDriveFiles(data.pdfFiles));
         console.log("Received drive files:", data.pdfFiles);
       }
     });
-     // Listen for initial file list after connecting
-  newSocket.on("initialFileList", (data: any) => {
-    if (data.error) {
-      console.log("Error fetching initial files:", data.error);
-    } else {
-      if(data.fileList.length>0)dispatch(setCurrentChatingFile("Local Files"));
-      dispatch(setUploadedFiles(data.fileList));
-      console.log("Received initial file list:", data.fileList);
-    }
-  });
-    
+
+    // Listen for initial file list after connecting
+    newSocket.on("initialFileList", (data: any) => {
+      if (data.error) {
+        console.log("Error fetching initial files:", data.error);
+      } else {
+        if (data.fileList.length > 0) dispatch(setCurrentChatingFile("Local Files"));
+        dispatch(setUploadedFiles(data.fileList));
+        console.log("Received initial file list:", data.fileList);
+      }
+    });
 
     return () => {
       newSocket.disconnect();
     };
-  }, [dispatch]);
+  });
+}, [dispatch]);
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     dispatch(setIsLoading(true));
