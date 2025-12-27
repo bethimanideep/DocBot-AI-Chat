@@ -28,6 +28,41 @@ import * as cookie from 'cookie';
 import { CallbackManagerForRetrieverRun } from "@langchain/core/callbacks/manager";
 
 const userRetrievers: any = {};
+const allowedOrigins = process.env.CORS?.split(",");
+
+const app = express();
+app.use(
+  cors({
+    origin: true, // Explicitly allow frontend URL
+    credentials: true, // Allow cookies and authentication headers
+  })
+);
+
+app.use(express.json());
+app.use(cookieParser());
+
+app.use(
+  session({
+    secret: `${process.env.JWT_SECRET}`,
+    resave: false,
+    saveUninitialized: false, // Changed to false for security
+    cookie: {
+      secure: process.env.NODE_ENV === "production", // HTTPS in production
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 1000 * 60 * 60 * 24, // 1 day
+    },
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+app.use("/auth", router);
+
+
+
+
+
 
 // Minimal retriever wrapper to satisfy LangChain's BaseRetriever interface
 class FunctionalRetriever extends BaseRetriever {
@@ -96,26 +131,7 @@ const client = createClient({
 
 client.on("error", (err) => console.log("Redis Client Error", err));
 
-const app = express();
-const allowedOrigins = process.env.CORS?.split(",");
-app.use(
-  cors({
-    origin: true, // Explicitly allow frontend URL
-    credentials: true, // Allow cookies and authentication headers
-  })
-);
-app.use(express.json());
-app.use(cookieParser());
-app.use(
-  session({
-    secret: `${process.env.JWT_SECRET}`,
-    resave: false,
-    saveUninitialized: true,
-  })
-);
-app.use(passport.initialize());
-app.use(passport.session());
-app.use("/auth", router);
+
 
 const server = http.createServer(app);
 const io = new Server(server, {
