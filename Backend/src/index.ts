@@ -328,8 +328,12 @@ const upload = multer({ storage: storage });
 
 // Function to process PDFs: extract text and chunk it
 async function processPdf(fileBuffer: Buffer) {
+  console.log({fileBuffer});
+  
   const data = await pdfParse(fileBuffer);
   const text = data.text;
+  console.log({text});
+  
 
   const splitter = new TokenTextSplitter({
     encodingName: "gpt2",
@@ -492,6 +496,8 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
 
       // Process PDF and generate embeddings
       const chunks = await processPdf(file.buffer);
+      console.log(chunks);
+      
       console.log({ FileName: file.originalname, Chunks: chunks.length });
 
       // Embed all chunks in one API call
@@ -1038,8 +1044,8 @@ app.post(
 
         // Process the PDF and split into chunks
         const chunks = await processPdf(file.buffer);
-        console.log({ FileName: file.originalname, Chunks: chunks.length });
-
+        console.log({ FileName: file.originalname, Chunks: chunks.length, textlength:chunks[0]?.length });
+        if(chunks[0]?.length<15)return res.status(400).json({ message: `The file ${file.originalname} is empty or could not be processed.` });
         io.emit("progressbar", 75);
 
         // Embed all chunks in one API call

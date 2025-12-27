@@ -2,6 +2,9 @@ import { toast } from "sonner";
 import { CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
 export const showToast = (type, message, description) => {
+  console.log({description});
+  console.log({message});
+  
   const toastConfig = {
     success: {
       icon: <CheckCircle className="h-5 w-5 text-green-500" />,
@@ -25,7 +28,7 @@ export const showToast = (type, message, description) => {
 
   toast[type](message, {
     description: (
-      <span style={{ color: toastConfig[type].color }}>
+      <span>
         {description}
       </span>
     ),

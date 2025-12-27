@@ -124,7 +124,7 @@ const Upload = () => {
       showToast("success", "", "Uploaded Successfully");
       dispatch(setCurrentChatingFile("Local Files"));
     } else {
-      showToast("error", "", "Upload Failed");
+      showToast("error", "Upload Failed",data.message);
     }
   } catch (error: any) {
     console.error("Error uploading file:", error);

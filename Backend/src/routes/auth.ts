@@ -303,6 +303,9 @@ router.post("/logout", (req:any, res:any) => {
   res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "none" });
   res.clearCookie("refreshToken", { httpOnly: true, secure: true, sameSite: "none" });
   res.clearCookie("DriveAccessToken", { httpOnly: true, secure: true, sameSite: "none" });
+  res.clearCookie("GoogleaccessToken", { httpOnly: true, secure: true, sameSite: "none" });
+  res.clearCookie("userId", { httpOnly: true, secure: true, sameSite: "none" });
+  res.clearCookie("username", { httpOnly: true, secure: true, sameSite: "none" });
 
   return res.status(200).json({ message: "Logout successful" });
 });
