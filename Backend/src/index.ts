@@ -106,13 +106,22 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+app.set("trust proxy", 1); // important on Render behind proxy
+
 app.use(
   session({
-    secret: `${process.env.JWT_SECRET}`,
+    secret: process.env.JWT_SECRET!,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
+    cookie: {
+      sameSite: "none",   // allow cross-site
+      secure: true,       // required when SameSite=None in browsers
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60 * 24 * 7, // example: 7 days
+    },
   })
 );
+
 app.use(passport.initialize());
 app.use(passport.session());
 app.use("/auth", router);
