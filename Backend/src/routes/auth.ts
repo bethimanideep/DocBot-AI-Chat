@@ -45,18 +45,18 @@ router.get(
         expiresIn: "1h",
       });
       res.cookie("username", username, {
-       httpOnly: false, secure: true, sameSite: "none", partitioned: true
+       httpOnly: false, secure: true, sameSite: "none"
       });
       res.cookie("userId", user._id.toString(), {
-        httpOnly: false, secure: true, sameSite: "none", partitioned: true
+        httpOnly: false, secure: true, sameSite: "none"
       });
       
       // Set tokens in cookies
       res.cookie("token", token, {
-       httpOnly: false, secure: true, sameSite: "none", partitioned: true
+       httpOnly: false, secure: true, sameSite: "none"
       });
       res.cookie("GoogleaccessToken", GoogleaccessToken, {
-        httpOnly: false, secure: true, sameSite: "none", partitioned: true
+        httpOnly: false, secure: true, sameSite: "none"
       });
 
       // Create redirect URL with params
