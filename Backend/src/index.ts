@@ -141,7 +141,18 @@ io.on("connection", async (socket) => {
    const cookies :any= socket.handshake.headers.cookie;
   let DriveAccessToken = null;
   let userToken = null;
-  const parsedCookies = cookie.parse(cookies);
+
+  
+  // Check if cookies exist before parsing
+let parsedCookies: any = {};
+if (cookies) {
+  try {
+    parsedCookies = cookie.parse(cookies);
+  } catch (error) {
+    console.error('Error parsing cookies:', error);
+  }
+}
+console.log('Parsed cookies:', parsedCookies);
   console.log(parsedCookies);
   
   
