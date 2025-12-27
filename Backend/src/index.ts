@@ -106,6 +106,13 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+app.use(
+  session({
+    secret: `${process.env.JWT_SECRET}`,
+    resave: false,
+    saveUninitialized: true,
+  })
+);
 app.use(passport.initialize());
 app.use(passport.session());
 app.use("/auth", router);
