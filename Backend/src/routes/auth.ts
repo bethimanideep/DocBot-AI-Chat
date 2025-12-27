@@ -13,13 +13,13 @@ const router = Router();
 // Google Sign-In (Basic Profile and Email)
 router.get(
   "/google",
-  passport.authenticate("google-signin", { scope: ["profile", "email"]  ,prompt:"select_account"})
+  passport.authenticate("google-signin", { scope: ["profile", "email"]  ,prompt:"select_account",session: false})
 );
 
 // Google Sign-In Callback
 router.get(
   "/google/callback",
-  passport.authenticate("google-signin", { failureRedirect: "/" }),
+  passport.authenticate("google-signin", { failureRedirect: "/",session: false, }),
   async (req, res) => {
     try {
       const userProfile = req.user as any; // Keeping profile type as any
@@ -76,11 +76,11 @@ router.get(
 // Google Drive Connection (Additional Permissions)
 router.get(
   "/google/drive",
-  passport.authenticate("google-drive", { scope: ["profile", "email", "https://www.googleapis.com/auth/drive.readonly"] })
+  passport.authenticate("google-drive", { scope: ["profile", "email", "https://www.googleapis.com/auth/drive.readonly"] ,session: false})
 );
 
 // Google Drive Callback
-router.get("/google/drive/callback",passport.authenticate("google-drive", { failureRedirect: "/" }),async (req, res) => {
+router.get("/google/drive/callback",passport.authenticate("google-drive", { failureRedirect: "/",session: false }),async (req, res) => {
     try {
       const userProfile = req.user as any; // Keeping profile type as any
       const DriveAccessToken = userProfile.DriveAccessToken; // Access token from Google

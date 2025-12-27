@@ -40,23 +40,9 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
-
-app.use(
-  session({
-    secret: `${process.env.JWT_SECRET}`,
-    resave: false,
-    saveUninitialized: false, // Changed to false for security
-    cookie: {
-      secure: process.env.NODE_ENV === "production", // HTTPS in production
-      httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 1000 * 60 * 60 * 24, // 1 day
-    },
-  })
-);
-
 app.use(passport.initialize());
-app.use(passport.session());
+
+
 app.use("/auth", router);
 
 
