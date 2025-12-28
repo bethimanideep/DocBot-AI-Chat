@@ -4,8 +4,6 @@ import express from "express";
 import { ChatGroq } from "@langchain/groq";
 import multer from "multer";
 import { TokenTextSplitter } from "@langchain/textsplitters";
-import { OpenAIEmbeddings } from "@langchain/openai";
-import session from "express-session";
 import mongoose from "mongoose";
 import { RetrievalQAChain } from "@langchain/classic/chains";
 import { createClient } from "redis";
@@ -28,6 +26,7 @@ import { CallbackManagerForRetrieverRun } from "@langchain/core/callbacks/manage
 // Endpoint to handle multiple file uploads
 import { PDFParse } from "pdf-parse";
 import Tesseract from "tesseract.js";
+import mammoth from "mammoth";
 
 const userRetrievers: any = {};
 const allowedOrigins = process.env.CORS?.split(",");
@@ -215,7 +214,7 @@ console.log('Parsed cookies:', parsedCookies);
 
       // Fetch PDFs and image files (exclude folders and trashed items)
       const response = await drive.files.list({
-        q: "(mimeType='application/pdf' OR mimeType contains 'image/') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
+        q: "(mimeType='application/pdf' OR mimeType contains 'image/' OR mimeType contains 'officedocument' OR mimeType = 'application/msword') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
         fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
       });
 
@@ -417,6 +416,31 @@ async function processImage(fileBuffer: Buffer): Promise<string[]> {
   }
 }
 
+// Function to process Word documents (DOCX/DOC) using mammoth
+async function processDocx(fileBuffer: Buffer): Promise<string[]> {
+  try {
+    // mammoth.extractRawText accepts {buffer: <Buffer>}
+    const result = await mammoth.extractRawText({ buffer: fileBuffer as any });
+    const text = result.value || "";
+
+    if (!text || text.trim().length < 20) {
+      throw new Error("Extracted text is empty or too short from docx");
+    }
+
+    const splitter = new TokenTextSplitter({
+      encodingName: "gpt2",
+      chunkSize: 7500,
+      chunkOverlap: 0,
+    });
+
+    const docs = await splitter.createDocuments([text]);
+    return docs.map((d) => d.pageContent);
+  } catch (err) {
+    console.error("Error processing docx with mammoth:", err);
+    throw new Error("Failed to extract text from docx");
+  }
+}
+
 app.get('/gdrive/sync', async (req: any, res: any) => {
   try {
     const { fileId, userId } = req.query as { fileId: string; userId: string };
@@ -577,7 +601,7 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
       const fileId = fileMetadata._id.toString(); // Use MongoDB's _id as fileId
       console.log("MongoDB _id used as fileId:", fileId);
 
-      // Only allow PDFs and images
+      // Allow PDFs, images, and Word documents
       if (file.mimetype === "application/pdf") {
         // Process PDF and generate embeddings (existing logic - unchanged)
         const chunks = await processPdf(file.buffer);
@@ -624,9 +648,36 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
             vector: embeddingsArray[i],
           });
         }
+      } else if (
+        file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        file.mimetype === "application/msword" ||
+        file.originalname.toLowerCase().endsWith('.docx') ||
+        file.originalname.toLowerCase().endsWith('.doc')
+      ) {
+        // Process Word document (DOCX/DOC) using mammoth
+        const chunks = await processDocx(file.buffer);
+        console.log({ FileName: file.originalname, Chunks: chunks.length });
+
+        const embeddingsArray = await embeddings.embedDocuments(chunks);
+
+        for (let i = 0; i < chunks.length; i++) {
+          batcher.withObject({
+            class: "Cwd",
+            properties: {
+              fileId,
+              file_name: file.originalname,
+              timestamp: new Date().toISOString(),
+              chunk_index: i,
+              text: chunks[i],
+              userId,
+              sourceType: "Local Files",
+            },
+            vector: embeddingsArray[i],
+          });
+        }
       } else {
         // Unsupported file type
-        return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs and images are allowed.` });
+        return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs, images and Word documents are allowed.` });
       }
 
       // (embeddings already appended to batcher in each branch)
@@ -1141,7 +1192,7 @@ app.post(
       if (!userRetrievers[socketId]) userRetrievers[socketId] = {};
 
       for (const file of files) {
-        // Only allow PDFs and images
+        // Allow PDFs, images, and Word documents
         if (file.mimetype === "application/pdf") {
           console.log(`Processing PDF: ${file.originalname}`);
 
@@ -1206,8 +1257,45 @@ app.post(
             embeddingsArray,
             documents
           );
+        } else if (
+          file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          file.mimetype === "application/msword" ||
+          file.originalname.toLowerCase().endsWith('.docx') ||
+          file.originalname.toLowerCase().endsWith('.doc')
+        ) {
+          console.log(`Processing DOC/DOCX: ${file.originalname}`);
+          const chunks = await processDocx(file.buffer);
+
+          if (!chunks || chunks.length === 0) {
+            return res.status(400).json({
+              message: `The file ${file.originalname} is empty or unreadable.`,
+            });
+          }
+
+          io.emit("progressbar", 75);
+
+          // ---------------- EMBEDDINGS ----------------
+          const embeddingsArray = await embeddings.embedDocuments(chunks);
+
+          const documents = chunks.map((chunk, index) => ({
+            pageContent: chunk,
+            metadata: { file_name: file.originalname, chunk_index: index },
+          }));
+
+          if (!userRetrievers[socketId][file.originalname]) {
+            userRetrievers[socketId][file.originalname] = {
+              vectorStore: new MemoryVectorStore(embeddings),
+              mimeType: file.mimetype,
+              fileSize: file.size,
+            };
+          }
+
+          await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
+            embeddingsArray,
+            documents
+          );
         } else {
-          return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs and images are allowed.` });
+          return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs, images and Word documents are allowed.` });
         }
       }
 

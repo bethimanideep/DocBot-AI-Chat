@@ -113,8 +113,8 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       }
       showToast("success", "", "Connected To Google Drive");
 
-  const data = await response.json();
-  dispatch(setDriveFiles(data.driveFiles));
+      const data = await response.json();
+      dispatch(setDriveFiles(data.pdfFiles));
       toggleSection("google");
     } catch (error) {
       console.log({ error });
@@ -200,7 +200,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   return (
     <div
       ref={sidebarRef}
-      className="h-full bg-white dark:bg-[#0a0a0a] border-r border-gray-200 dark:border-gray-700 shadow-xl relative"
+      className="bg-white dark:bg-[#0a0a0a] border-r border-gray-200 dark:border-gray-700 shadow-xl relative"
       style={{ width: `${sidebarWidth.current}px`, transition: "none" }}
     >
       {/* Header */}
@@ -250,7 +250,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
             <div
               className={cn(
                 "overflow-y-auto transition-all duration-200", // Enable native scrollbar
-                expandedSections["local"] ? "max-h-[500px]" : "max-h-0" // Adjust height dynamically
+                expandedSections["local"] ? "max-h-[33vh]" : "max-h-0" // Adjust height dynamically
               )}
             >
               {uploadedFiles.length > 0 ? (
@@ -332,13 +332,13 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
           <div
             className={cn(
               "overflow-hidden transition-all duration-200",
-              expandedSections["google"] ? "max-h-[500px]" : "max-h-0"
+              expandedSections["google"] ? "max-h-[full]" : "max-h-0"
             )}
           >
             <div
               className={cn(
                 "overflow-y-auto transition-all duration-200",
-                expandedSections["google"] ? "max-h-[500px]" : "max-h-0"
+                expandedSections["google"] ? "max-h-[33vh]" : "max-h-0"
               )}
             >
               {driveFiles.length > 0 ? (

@@ -121,7 +121,7 @@ router.get("/google/drive/files", async (req: any, res: any) => {
 
     // Fetch PDF and image files from Google Drive (exclude folders and trashed items)
     const response = await drive.files.list({
-      q: "(mimeType='application/pdf' OR mimeType contains 'image/') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
+      q: "(mimeType='application/pdf' OR mimeType contains 'image/' OR mimeType contains 'officedocument' OR mimeType = 'application/msword') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
       fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
     });
 
