@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Sparkles } from "lucide-react";
+import { Send, Sparkles,ExternalLink } from "lucide-react";
 import { RootState } from "./reduxtoolkit/store";
 import { useSelector } from "react-redux";
 import { showToast } from "@/lib/toast";
+import Linkify from 'linkify-react';
+import { useMemo } from 'react';
+
 
 interface Message {
   id: number;
@@ -87,11 +90,11 @@ export const Chat = () => {
   }, [currentChatingFile]);
 
   const handleStreamingResponse = async (query: string) => {
-    if(currentChatingFile==null){
+    if (currentChatingFile == null) {
       showToast("warning", "", "Select Any File To Chat");
-     return; 
+      return;
     }
-    
+
     let url: string;
     let body: any;
     if (!userId) {
@@ -166,12 +169,12 @@ export const Chat = () => {
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = JSON.parse(line.substring(6));
-              
+
               if (data.token) {
                 fullText += data.token;
-                setMessages(prev => prev.map(msg => 
-                  msg.id === botMessageId 
-                    ? { ...msg, text: fullText } 
+                setMessages(prev => prev.map(msg =>
+                  msg.id === botMessageId
+                    ? { ...msg, text: fullText }
                     : msg
                 ));
               }
@@ -189,9 +192,9 @@ export const Chat = () => {
       }
 
       // Finalize the message
-      setMessages(prev => prev.map(msg => 
-        msg.id === botMessageId 
-          ? { ...msg, isStreaming: false } 
+      setMessages(prev => prev.map(msg =>
+        msg.id === botMessageId
+          ? { ...msg, isStreaming: false }
           : msg
       ));
 
@@ -199,15 +202,15 @@ export const Chat = () => {
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error("Streaming error:", error);
         showToast("error", "Error", error.message || "Failed to get response");
-        
+
         // Update the message with error state
-        setMessages(prev => prev.map(msg => 
-          msg.id === botMessageId 
-            ? { 
-                ...msg, 
-                text: msg.text || "Error: Could not get response",
-                isStreaming: false 
-              } 
+        setMessages(prev => prev.map(msg =>
+          msg.id === botMessageId
+            ? {
+              ...msg,
+              text: msg.text || "Error: Could not get response",
+              isStreaming: false
+            }
             : msg
         ));
       }
@@ -219,9 +222,9 @@ export const Chat = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(currentChatingFile==null){
+    if (currentChatingFile == null) {
       showToast("warning", "", "Select Or Upload Any File To Chat");
-     return; 
+      return;
     }
     if (!newMessage.trim()) return;
 
@@ -231,7 +234,7 @@ export const Chat = () => {
       sender: "user",
       timestamp: new Date().toISOString(),
     };
-    
+
     setMessages(prev => [...prev, userMessage]);
     setNewMessage("");
     setIsLoading(true);
@@ -264,43 +267,39 @@ export const Chat = () => {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${
-                message.sender === "user" ? "justify-end" : "justify-start"
-              } transform transition-all duration-300 hover:-translate-y-1`}
+              className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"
+                } transform transition-all duration-300 hover:-translate-y-1`}
             >
               <div
-                className={`max-w-[85%] p-3 sm:p-4 md:p-6 ${
-                  message.sender === "user"
-                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-500 dark:to-indigo-500 text-white ml-auto rounded-[1rem] sm:rounded-[1.5rem] rounded-tr-sm border border-white/10 shadow-[0_8px_30px_rgb(124,58,237,0.2)] dark:shadow-[0_8px_30px_rgba(124,58,237,0.15)]"
-                    : "bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 text-gray-800 dark:text-gray-200 rounded-[1rem] sm:rounded-[1.5rem] rounded-tl-sm shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)]"
-                }`}
+                className={`max-w-[85%] p-3 sm:p-4 md:p-3 ${message.sender === "user"
+                     ? "bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-500 dark:to-indigo-500 text-white ml-auto rounded-xl sm:rounded-2xl rounded-tr-sm border border-white/10 shadow-[0_4px_14px_rgba(124,58,237,0.25)]"
+                    : "bg-transparent dark:bg-transparent text-gray-800 dark:text-gray-200 p-0 shadow-none border-0 rounded-none max-w-full break-words overflow-hidden"
+
+
+                  }`}
               >
                 {message.sender === "user" ? (
                   <p className="text-[13px] sm:text-[14px] md:text-[15px] leading-relaxed tracking-wide font-medium text-white/95">
                     {message.text}
                   </p>
                 ) : (
-                  <div className="whitespace-pre-wrap text-[13px] sm:text-[14px] md:text-[15px] leading-relaxed tracking-wide font-medium">
-                    {message.text}
-                  </div>
+                  <DynamicStyledBlock text={message.text} />
                 )}
+
                 {message.sourceDocuments && (
-                  <div className={`mt-3 sm:mt-4 pt-3 sm:pt-4 ${
-                    message.sender === "user" 
-                      ? "border-t border-white/10" 
+                  <div className={`mt-3 sm:mt-4 pt-3 sm:pt-4 ${message.sender === "user"
+                      ? "border-t border-white/10"
                       : "border-t border-gray-100 dark:border-gray-800"
-                  }`}>
-                    <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-2 mb-2 sm:mb-3 ${
-                      message.sender === "user" 
-                        ? "text-white/90" 
-                        : "text-gray-600 dark:text-gray-400"
                     }`}>
+                    <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-2 mb-2 sm:mb-3 ${message.sender === "user"
+                        ? "text-white/90"
+                        : "text-gray-600 dark:text-gray-400"
+                      }`}>
                       Sources <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-pulse" />
                     </p>
                     {message.sourceDocuments.map((doc, index) => (
-                      <p key={index} className={`text-[11px] sm:text-[12px] md:text-[13px] ${
-                        message.sender === "user" 
-                          ? "text-white/80" 
+                      <p key={index} className={`text-[11px] sm:text-[12px] md:text-[13px] ${message.sender === "user"
+                          ? "text-white/80"
                           : "text-gray-600 dark:text-gray-400"
                         } leading-relaxed`}>
                         {doc.pageContent?.substring(0, 100)}...
@@ -308,11 +307,10 @@ export const Chat = () => {
                     ))}
                   </div>
                 )}
-                <div className={`flex items-center justify-end mt-2 sm:mt-3 gap-1.5 sm:gap-2 ${
-                  message.sender === "user" 
-                    ? "text-white/70" 
+                <div className={`flex items-center justify-end mt-2 sm:mt-3 gap-1.5 sm:gap-2 ${message.sender === "user"
+                    ? "text-white/70"
                     : "text-gray-500 dark:text-gray-500"
-                }`}>
+                  }`}>
                   <span className="text-[10px] sm:text-[11px] font-medium tracking-wider">
                     {new Date(message.timestamp).toLocaleTimeString([], {
                       hour: "2-digit",
@@ -367,6 +365,143 @@ export const Chat = () => {
           </button>
         </form>
       </div>
+    </div>
+  );
+};
+const DynamicStyledBlock = ({ text }: { text: string }) => {
+  if (!text) return null;
+
+  const linkifyOptions = useMemo(
+    () => ({
+      target: "_blank",
+      rel: "noopener noreferrer",
+      className:
+        "text-blue-600 dark:text-blue-400 underline underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300 break-all",
+    }),
+    []
+  );
+
+  const normalizeValue = (label: string, value: string) => {
+    const key = label.toLowerCase();
+
+    if (key.includes("email")) return `mailto:${value}`;
+    if (key.includes("linkedin"))
+      return `https://www.linkedin.com/in/${value}`;
+    if (key.includes("portfolio")) return `https://${value}`;
+
+    return value;
+  };
+
+  const blocks = text
+    .split(/\n\n+/)
+    .map(b => b.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="space-y-5 break-words max-w-full">
+      {blocks.map((block, i) => {
+        const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
+
+        // 🔥 ORIGINAL HEADING LOGIC
+        const first = lines[0];
+        const isHeading =
+          /^[A-Z].*:$/i.test(first) || // Title:
+          /^#+\s/.test(first) ||       // Markdown #
+          /^\*\*(.+)\*\*$/.test(first); // **Title**
+
+        const rest = isHeading ? lines.slice(1) : lines;
+
+        return (
+          <div
+            key={i}
+            className="p-1 sm:p-1 bg-white dark:bg-[#121212]"
+          >
+            {isHeading && (
+              <>
+                <h3
+                  className="
+                    text-base sm:text-lg font-bold
+                    bg-clip-text text-transparent
+                    bg-gradient-to-r from-violet-500 to-indigo-500
+                    mb-2
+                  "
+                >
+                  {first.replace(/\*\*/g, "").replace(/#+\s/, "")}
+                </h3>
+                <div className="h-px bg-gradient-to-r from-violet-500 to-indigo-500 opacity-30 mb-3" />
+              </>
+            )}
+
+            <div className="space-y-2 text-gray-800 dark:text-gray-300 text-[13px] sm:text-[14px] leading-relaxed">
+              {rest.map((line, idx) => {
+                /* LABEL: VALUE (Phone, Email, Location, etc.) */
+                const labelMatch = line.match(/^([^:]+):\s*(.+)$/);
+                if (labelMatch) {
+                  const [, label, value] = labelMatch;
+                  const normalized = normalizeValue(label, value);
+
+                  return (
+                    <p key={idx} className="flex gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {label}:
+                      </span>
+                      <Linkify options={linkifyOptions}>
+                        {normalized}
+                      </Linkify>
+                    </p>
+                  );
+                }
+
+                /* PROJECT TITLE (1. **Title**) */
+                if (/^\d+\.\s*\*\*/.test(line)) {
+                  return (
+                    <div
+                      key={idx}
+                      className="mt-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#181818]"
+                    >
+                      <p className="font-semibold text-indigo-600 dark:text-indigo-400">
+                        {line
+                          .replace(/^\d+\.\s*/, "")
+                          .replace(/\*\*/g, "")}
+                      </p>
+                    </div>
+                  );
+                }
+
+                /* BULLET POINTS (*, -, +) */
+                if (/^[-*+]\s/.test(line))
+                  return (
+                    <p key={idx} className="flex items-start gap-2 ml-2">
+                      <span className="mt-1 text-indigo-500">•</span>
+                      <Linkify options={linkifyOptions}>
+                        {line.replace(/^[-*+]\s/, "").trim()}
+                      </Linkify>
+                    </p>
+                  );
+
+                /* NUMBERED LIST */
+                if (/^\d+\./.test(line))
+                  return (
+                    <p key={idx}>
+                      <Linkify options={linkifyOptions}>
+                        {line}
+                      </Linkify>
+                    </p>
+                  );
+
+                /* NORMAL TEXT */
+                return (
+                  <p key={idx}>
+                    <Linkify options={linkifyOptions}>
+                      {line}
+                    </Linkify>
+                  </p>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
