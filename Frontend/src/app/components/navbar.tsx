@@ -64,6 +64,19 @@ export default function Navbar() {
   return (
     <div>
       <header className="flex sticky h-14 sm:h-16 md:h-20 w-full shrink-0 items-center px-2 sm:px-4 md:px-6">
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 lg:hidden">
+              <MenuIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="sr-only">Toggle file sidebar</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0">
+            <SheetDescription></SheetDescription>
+            <SheetTitle></SheetTitle>
+            <FileSidebar onFileClick={() => setIsSheetOpen(false)} />
+          </SheetContent>
+        </Sheet>
         <Link href="#" className="mr-6 hidden lg:flex" prefetch={false}>
           <ShirtIcon className="h-5 w-5 sm:h-6 sm:w-6" />
           <span className="sr-only">ShadCN</span>

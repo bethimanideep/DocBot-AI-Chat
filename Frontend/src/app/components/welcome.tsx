@@ -104,26 +104,38 @@ export const Welcome = () => {
         <p className="text-base sm:text-lg md:text-xl text-gray-700 mb-6 sm:mb-8 leading-relaxed">
           Your smart file companion that makes document conversations simple and productive.
         </p>
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12 w-full">
+  <div className="bg-white dark:bg-[#101626] p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 dark:border-white/10 hover:shadow-lg transition-shadow">
+    <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500 mb-2 sm:mb-3" />
+    <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 text-gray-900 dark:text-white">
+      Access Documents
+    </h3>
+    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+      Easily find and interact with all your important files
+    </p>
+  </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12 w-full">
-          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
-            <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500 mb-2 sm:mb-3" />
-            <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">Access Documents</h3>
-            <p className="text-sm sm:text-base text-gray-600">Easily find and interact with all your important files</p>
-          </div>
+  <div className="bg-white dark:bg-[#101626] p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 dark:border-white/10 hover:shadow-lg transition-shadow">
+    <MessageSquare className="w-6 h-6 sm:w-8 sm:h-8 text-purple-500 mb-2 sm:mb-3" />
+    <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 text-gray-900 dark:text-white">
+      Chat with Files
+    </h3>
+    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+      Ask questions and discuss any part of your documents
+    </p>
+  </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
-            <MessageSquare className="w-6 h-6 sm:w-8 sm:h-8 text-purple-500 mb-2 sm:mb-3" />
-            <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">Chat with Files</h3>
-            <p className="text-sm sm:text-base text-gray-600">Ask questions and discuss any part of your documents</p>
-          </div>
+  <div className="bg-white dark:bg-[#101626] p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 dark:border-white/10 hover:shadow-lg transition-shadow">
+    <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500 mb-2 sm:mb-3" />
+    <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 text-gray-900 dark:text-white">
+      Smart Insights
+    </h3>
+    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+      Get summaries and key information automatically
+    </p>
+  </div>
+</div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
-            <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500 mb-2 sm:mb-3" />
-            <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">Smart Insights</h3>
-            <p className="text-sm sm:text-base text-gray-600">Get summaries and key information automatically</p>
-          </div>
-        </div>
 
         <div className="w-full max-w-sm sm:max-w-md">
           <div className="flex flex-col items-center gap-3 sm:gap-4">
