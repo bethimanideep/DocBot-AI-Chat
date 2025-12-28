@@ -38,24 +38,6 @@ export const Welcome = () => {
       console.log(message);
       dispatch(setProgress(message));
     });
-
-    newSocket.on("driveFilesResponse", (data: any) => {
-      if (data.error) {
-        console.log(data.error);
-      } else {
-        dispatch(setDriveFiles(data.driveFiles));
-        console.log("Received drive files:", data.driveFiles);
-      }
-    });
-     // Listen for initial file list after connecting
-  newSocket.on("initialFileList", (data: any) => {
-    if (data.error) {
-      console.log("Error fetching initial files:", data.error);
-    } else {
-      dispatch(setUploadedFiles(data.fileList));
-      console.log("Received initial file list:", data.fileList);
-    }
-  });
     
 
     return () => {

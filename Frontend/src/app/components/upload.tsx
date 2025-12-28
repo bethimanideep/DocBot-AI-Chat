@@ -8,8 +8,9 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { RootState } from "./reduxtoolkit/store";
-import { setSocketId, setUploadedFiles ,setProgress,setIsLoading, setSocketInstance, setCurrentChatingFile} from "./reduxtoolkit/socketSlice";
+import { setSocketId, setUploadedFiles ,setProgress,setIsLoading, setSocketInstance, setCurrentChatingFile, setUsername, setUserId} from "./reduxtoolkit/socketSlice";
 import { setDriveFiles } from "./reduxtoolkit/driveSlice";
+import { toast } from "sonner";
 
 interface WelcomeProps {
   onGetStarted: () => void;
@@ -79,9 +80,30 @@ const Upload = () => {
       }
     });
      // Listen for initial file list after connecting
-  newSocket.on("initialFileList", (data: any) => {
+  newSocket.on("initialFileList", async(data: any) => {
     if (data.error) {
       console.log("Error fetching initial files:", data.error);
+      toast.error("Session Expired.");
+      try {
+            console.log('Backend URL:', process.env.NEXT_PUBLIC_BACKEND_URL);
+            
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/logout`, {
+              method: "POST",
+              credentials: "include", // Ensures cookies are included in the request
+            });
+            const data = await response.json();
+            if (response.ok) {
+              console.log(data);
+              dispatch(setUsername(null));
+              dispatch(setUploadedFiles([]as any));
+              dispatch(setUserId(null));
+              dispatch(setDriveFiles([]as any));
+            } else {
+              console.error("Logout failed");
+            }
+          } catch (error) {
+            console.error("Error during logout:", error);
+          }
     } else {
       if(data.fileList.length>0)dispatch(setCurrentChatingFile("Local Files"));
       dispatch(setUploadedFiles(data.fileList));
