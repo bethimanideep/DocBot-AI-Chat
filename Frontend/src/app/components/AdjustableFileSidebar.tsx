@@ -26,7 +26,7 @@ export const AdjustableFileSidebar = () => {
   const uploadedFiles = useSelector(
     (state: RootState) => state.socket.uploadedFiles
   );
-  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [sidebarWidth, setSidebarWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const resizeRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);

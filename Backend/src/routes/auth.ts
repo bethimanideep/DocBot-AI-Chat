@@ -309,5 +309,15 @@ router.post("/logout", (req:any, res:any) => {
 
   return res.status(200).json({ message: "Logout successful" });
 });
+router.post("/drivelogout", (req:any, res:any) => {
+  try {
+    
+    res.clearCookie("DriveAccessToken", { httpOnly: true, secure: true, sameSite: "none" });
+    return res.status(200).json({ message: "Logout successful" });
+  } catch (error) {
+    res.status(500).json({ error: error});
+  }
+
+});
 
 export default router;

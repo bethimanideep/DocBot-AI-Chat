@@ -83,6 +83,7 @@ const Upload = () => {
   newSocket.on("initialFileList", async(data: any) => {
     if (data.error) {
       console.log("Error fetching initial files:", data.error);
+      if(data.error!="Unauthorized: No access token")
       toast.error("Session Expired.");
       try {
             console.log('Backend URL:', process.env.NEXT_PUBLIC_BACKEND_URL);

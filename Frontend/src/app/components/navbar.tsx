@@ -30,6 +30,7 @@ import { AdjustableFileSidebar } from "./AdjustableFileSidebar";
 import { FileSidebar } from "./fileSidebar";
 import { setDriveFiles } from "./reduxtoolkit/driveSlice";
 import { useState } from "react";
+import { showToast } from "@/lib/toast";
 
 export default function Navbar() {
   const username = useSelector((state: RootState) => state.socket.username);
@@ -47,6 +48,7 @@ export default function Navbar() {
       });
       const data = await response.json();
       if (response.ok) {
+        showToast("success", "Logged Out", "You have been logged out successfully.");
         console.log(data);
         dispatch(setUsername(null));
         dispatch(setUploadedFiles([]as any));
