@@ -48,8 +48,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const isDragging = useRef(false);
   const startX = useRef(0);
   const currentX = useRef(0);
-  const sidebarWidth = useRef(374);
-
+  const sidebarWidth = useRef(350); 
   const handleSyncFile = async (fileId: string, e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
   
