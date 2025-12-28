@@ -3,7 +3,6 @@ dotenv.config();
 import express from "express";
 import { ChatGroq } from "@langchain/groq";
 import multer from "multer";
-import pdfParse from "pdf-parse";
 import { TokenTextSplitter } from "@langchain/textsplitters";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import session from "express-session";
@@ -26,6 +25,9 @@ import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import * as cookie from 'cookie';
 import { CallbackManagerForRetrieverRun } from "@langchain/core/callbacks/manager";
+// Endpoint to handle multiple file uploads
+import { PDFParse } from "pdf-parse";
+import Tesseract from "tesseract.js";
 
 const userRetrievers: any = {};
 const allowedOrigins = process.env.CORS?.split(",");
@@ -211,9 +213,9 @@ console.log('Parsed cookies:', parsedCookies);
       // Create Google Drive API client
       const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-      // Fetch PDF files
+      // Fetch PDFs and image files (exclude folders and trashed items)
       const response = await drive.files.list({
-        q: "mimeType='application/pdf'",
+        q: "(mimeType='application/pdf' OR mimeType contains 'image/') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
         fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
       });
 
@@ -239,19 +241,19 @@ console.log('Parsed cookies:', parsedCookies);
         sync_idMap.set(file.fileId, file._id);
       });
 
-      const pdfFiles = response.data.files?.map((file) => ({
+      const driveFiles = response.data.files?.map((file) => ({
         id: file.id,
         name: file.name,
         webViewLink: file.webViewLink,
         thumbnailLink: file.thumbnailLink,
         fileSize: file.size ? parseInt(file.size) : 0,
         mimeType: file.mimeType || "application/pdf",
-        synced: syncStatusMap.get(file.id) || false, // Add sync status
-        _id: sync_idMap.get(file.id) || false // Add sync status
+        synced: syncStatusMap.get(file.id) || false,
+        _id: sync_idMap.get(file.id) || false,
       }));
 
-      // Emit the response to the frontend
-      socket.emit("driveFilesResponse", { pdfFiles });
+      // Emit the response to the frontend (now named driveFiles)
+      socket.emit("driveFilesResponse", { driveFiles });
     } catch (error) {
       console.error("Error fetching Google Drive files:", error);
       if (error instanceof Error) {
@@ -327,35 +329,105 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // Function to process PDFs: extract text and chunk it
-async function processPdf(fileBuffer: Buffer) {
-  console.log({fileBuffer});
-  
-  const data = await pdfParse(fileBuffer);
-  const text = data.text;
-  console.log({text});
-  
+async function processPdf(fileBuffer: Buffer): Promise<string[]> {
+  const parser = new PDFParse({ data: fileBuffer });
+  let text = "";
 
+  try {
+    // First attempt: Extract text directly from PDF
+    const result = await parser.getText();
+    text = result.text || "";
+  } catch (err) {
+    console.log("pdf-parse getText failed, will try OCR...");
+  }
+
+  // Fallback to OCR if text extraction failed or text is too short
+  if (!text || text.trim().length < 20) {
+    console.log("No text layer found - converting to images and performing OCR...");
+
+    try {
+      const screenshot = await parser.getScreenshot({
+        scale: 1.5,
+        imageBuffer: true,
+        imageDataUrl: false
+      });
+
+      text = "";
+
+      for (const page of screenshot.pages) {
+        // Convert Uint8Array to Buffer if needed
+        const img = Buffer.isBuffer(page.data)
+          ? page.data
+          : Buffer.from(page.data);
+
+        const result = await Tesseract.recognize(img, "eng");
+        text += result.data.text + "\n\n";
+      }
+    } catch (ocrError) {
+      console.error("OCR processing failed:", ocrError);
+      throw new Error("Failed to extract text from PDF using OCR");
+    }
+  }
+
+  await parser.destroy();
+
+  // Validate extracted text
+  if (!text || text.trim().length < 20) {
+    throw new Error("Extracted text is empty or too short");
+  }
+
+  console.log("------- Extracted Text Preview -------");
+  console.log(text.substring(0, 500) + "..."); // Show preview only
+  console.log("------- Extracted Text End -------");
+
+  // Split text into chunks
   const splitter = new TokenTextSplitter({
     encodingName: "gpt2",
     chunkSize: 7500,
     chunkOverlap: 0,
   });
 
-  const chunks = await splitter.createDocuments([text]);
-  return chunks.map((chunk) => chunk.pageContent);
+  const docs = await splitter.createDocuments([text]);
+  return docs.map((d) => d.pageContent);
+}
+
+// Function to process images: perform OCR using Tesseract and chunk the resulting text
+async function processImage(fileBuffer: Buffer): Promise<string[]> {
+  try {
+    // Run Tesseract OCR on the image buffer
+    const result = await Tesseract.recognize(fileBuffer, "eng");
+    const text = result.data?.text || "";
+
+    if (!text || text.trim().length < 20) {
+      throw new Error("Extracted text is empty or too short from image");
+    }
+
+    // Use the same token splitter as PDFs to create chunks
+    const splitter = new TokenTextSplitter({
+      encodingName: "gpt2",
+      chunkSize: 7500,
+      chunkOverlap: 0,
+    });
+
+    const docs = await splitter.createDocuments([text]);
+    return docs.map((d) => d.pageContent);
+  } catch (err) {
+    console.error("Error processing image with OCR:", err);
+    throw new Error("Failed to extract text from image using OCR");
+  }
 }
 
 app.get('/gdrive/sync', async (req: any, res: any) => {
   try {
     const { fileId, userId } = req.query as { fileId: string; userId: string };
-    const driveAccessToken = req.cookies.driveAccessToken as string;
+    const DriveAccessToken = req.cookies.DriveAccessToken as string;
 
     // Initialize Google Drive client
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID!,
       process.env.GOOGLE_CLIENT_SECRET!
     );
-    oauth2Client.setCredentials({ access_token: driveAccessToken });
+    oauth2Client.setCredentials({ access_token: DriveAccessToken });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
     // Get file metadata
@@ -390,8 +462,19 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
       { upsert: true, new: true }
     );
 
-    // Process PDF and generate embeddings
-    const chunks = await processPdf(fileBuffer);
+    // Choose processor according to mime type
+    const mimeType = fileMetadata.mimeType || "";
+    let chunks: string[];
+    if (mimeType === "application/pdf") {
+      // Process PDF and generate embeddings
+      chunks = await processPdf(fileBuffer);
+    } else if (mimeType.startsWith("image/")) {
+      // Process image using OCR
+      chunks = await processImage(fileBuffer);
+    } else {
+      return res.status(400).json({ message: `Unsupported mime type: ${mimeType}` });
+    }
+
     const embeddingsArray = await embeddings.embedDocuments(chunks);
 
     // Delete existing Weaviate objects
@@ -494,31 +577,59 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
       const fileId = fileMetadata._id.toString(); // Use MongoDB's _id as fileId
       console.log("MongoDB _id used as fileId:", fileId);
 
-      // Process PDF and generate embeddings
-      const chunks = await processPdf(file.buffer);
-      console.log(chunks);
-      
-      console.log({ FileName: file.originalname, Chunks: chunks.length });
+      // Only allow PDFs and images
+      if (file.mimetype === "application/pdf") {
+        // Process PDF and generate embeddings (existing logic - unchanged)
+        const chunks = await processPdf(file.buffer);
+        console.log({ FileName: file.originalname, Chunks: chunks.length });
 
-      // Embed all chunks in one API call
-      const embeddingsArray = await embeddings.embedDocuments(chunks);
+        // Embed all chunks in one API call
+        const embeddingsArray = await embeddings.embedDocuments(chunks);
 
-      // Store embeddings in Weaviate with a reference to the MongoDB _id
-      for (let i = 0; i < chunks.length; i++) {
-        batcher.withObject({
-          class: "Cwd", // Use the correct class name from your schema
-          properties: {
-            fileId, // MongoDB _id as reference
-            file_name: file.originalname,
-            timestamp: new Date().toISOString(),
-            chunk_index: i,
-            text: chunks[i],
-            userId,
-            sourceType: "Local Files",
-          },
-          vector: embeddingsArray[i],
-        });
+        // Store embeddings in Weaviate with a reference to the MongoDB _id
+        for (let i = 0; i < chunks.length; i++) {
+          batcher.withObject({
+            class: "Cwd", // Use the correct class name from your schema
+            properties: {
+              fileId, // MongoDB _id as reference
+              file_name: file.originalname,
+              timestamp: new Date().toISOString(),
+              chunk_index: i,
+              text: chunks[i],
+              userId,
+              sourceType: "Local Files",
+            },
+            vector: embeddingsArray[i],
+          });
+        }
+      } else if (file.mimetype.startsWith("image/")) {
+        // Process image using OCR and generate embeddings
+        const chunks = await processImage(file.buffer);
+        console.log({ FileName: file.originalname, Chunks: chunks.length });
+
+        const embeddingsArray = await embeddings.embedDocuments(chunks);
+
+        for (let i = 0; i < chunks.length; i++) {
+          batcher.withObject({
+            class: "Cwd",
+            properties: {
+              fileId,
+              file_name: file.originalname,
+              timestamp: new Date().toISOString(),
+              chunk_index: i,
+              text: chunks[i],
+              userId,
+              sourceType: "Local Files",
+            },
+            vector: embeddingsArray[i],
+          });
+        }
+      } else {
+        // Unsupported file type
+        return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs and images are allowed.` });
       }
+
+      // (embeddings already appended to batcher in each branch)
     }
 
     // Send batch request to Weaviate (if batcher has objects)
@@ -634,7 +745,7 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
         .withFields("text file_name fileId timestamp _additional { id distance }")
         .withWhere(whereFilter)
         .withNearVector({ vector: queryEmbedding })
-        .withLimit(1)
+        .withLimit(3)
         .do();
       
       const documents = result.data?.Get?.Cwd || [];
@@ -724,7 +835,7 @@ app.post("/userfilechat", async (req: any, res: any) => {
         .withFields("text file_name fileId timestamp _additional { id distance }")
         .withWhere(whereFilter)
         .withNearVector({ vector: queryEmbedding })
-        .withLimit(1)
+        .withLimit(3)
         .do();
       
       const documents = result.data?.Get?.Cwd || [];
@@ -1011,70 +1122,97 @@ app.get("/getAllData", async (req: any, res: any) => {
   }
 });
 
-// Endpoint to handle multiple file uploads
 app.post(
   "/myuserupload",
   upload.array("files", 10),
   async (req: any, res: any) => {
     try {
-      const { socketId } = req.query; // Get socketId from query params
+      const { socketId } = req.query;
       const files = req.files;
 
-      if (!socketId) {
+      if (!socketId)
         return res.status(400).json({ message: "Socket ID is required." });
-      }
 
-      if (!files || files.length === 0) {
+      if (!files || files.length === 0)
         return res.status(400).json({ message: "No files uploaded." });
-      }
 
       io.emit("progressbar", 50);
 
-      // Initialize the user's retriever storage if not present
-      if (!userRetrievers[socketId]) {
-        userRetrievers[socketId] = {};
-      }
+      if (!userRetrievers[socketId]) userRetrievers[socketId] = {};
 
       for (const file of files) {
-        if (file.mimetype !== "application/pdf") {
-          console.log(`Skipping non-PDF file: ${file.originalname}`);
-          continue;
+        // Only allow PDFs and images
+        if (file.mimetype === "application/pdf") {
+          console.log(`Processing PDF: ${file.originalname}`);
+
+          // Process PDF and get chunks (existing logic)
+          const chunks = await processPdf(file.buffer);
+
+          if (!chunks || chunks.length === 0) {
+            return res.status(400).json({
+              message: `The file ${file.originalname} is empty or unreadable.`,
+            });
+          }
+
+          io.emit("progressbar", 75);
+
+          // ---------------- EMBEDDINGS ----------------
+          const embeddingsArray = await embeddings.embedDocuments(chunks);
+
+          const documents = chunks.map((chunk, index) => ({
+            pageContent: chunk,
+            metadata: { file_name: file.originalname, chunk_index: index },
+          }));
+
+          if (!userRetrievers[socketId][file.originalname]) {
+            userRetrievers[socketId][file.originalname] = {
+              vectorStore: new MemoryVectorStore(embeddings),
+              mimeType: file.mimetype,
+              fileSize: file.size,
+            };
+          }
+
+          await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
+            embeddingsArray,
+            documents
+          );
+        } else if (file.mimetype.startsWith("image/")) {
+          console.log(`Processing image: ${file.originalname}`);
+          const chunks = await processImage(file.buffer);
+
+          if (!chunks || chunks.length === 0) {
+            return res.status(400).json({
+              message: `The image ${file.originalname} produced no text.`,
+            });
+          }
+
+          io.emit("progressbar", 75);
+
+          const embeddingsArray = await embeddings.embedDocuments(chunks);
+          const documents = chunks.map((chunk, index) => ({
+            pageContent: chunk,
+            metadata: { file_name: file.originalname, chunk_index: index },
+          }));
+
+          if (!userRetrievers[socketId][file.originalname]) {
+            userRetrievers[socketId][file.originalname] = {
+              vectorStore: new MemoryVectorStore(embeddings),
+              mimeType: file.mimetype,
+              fileSize: file.size,
+            };
+          }
+
+          await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
+            embeddingsArray,
+            documents
+          );
+        } else {
+          return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs and images are allowed.` });
         }
-        console.log(file.originalname);
-
-        // Process the PDF and split into chunks
-        const chunks = await processPdf(file.buffer);
-        console.log({ FileName: file.originalname, Chunks: chunks.length, textlength:chunks[0]?.length });
-        if(chunks[0]?.length<15)return res.status(400).json({ message: `The file ${file.originalname} is empty or could not be processed.` });
-        io.emit("progressbar", 75);
-
-        // Embed all chunks in one API call
-        const embeddingsArray = await embeddings.embedDocuments(chunks);
-
-        // Create documents with metadata
-        const documents = chunks.map((chunk, index) => ({
-          pageContent: chunk,
-          metadata: { file_name: file.originalname, chunk_index: index },
-        }));
-
-        // Initialize or update the vector store for the file
-        if (!userRetrievers[socketId][file.originalname]) {
-          userRetrievers[socketId][file.originalname] = {
-            vectorStore: new MemoryVectorStore(embeddings),
-            mimeType: file.mimetype, // Store mimeType
-            fileSize: file.size, // Store fileSize
-          };
-        }
-
-        // Add documents to the vector store
-        await userRetrievers[socketId][
-          file.originalname
-        ].vectorStore.addVectors(embeddingsArray, documents);
       }
 
       io.emit("progressbar", 100);
 
-      // Retrieve stored files related to the user (socketId) with mimeType and fileSize
       const userFiles = Object.keys(userRetrievers[socketId]).map(
         (filename, index) => ({
           _id: index,
@@ -1094,6 +1232,7 @@ app.post(
     }
   }
 );
+
 
 app.post("/chat", async (req: any, res: any) => {
   try {

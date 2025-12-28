@@ -42,10 +42,9 @@ export const Welcome = () => {
     newSocket.on("driveFilesResponse", (data: any) => {
       if (data.error) {
         console.log(data.error);
-        
       } else {
-        dispatch(setDriveFiles(data.pdfFiles));
-        console.log("Received drive files:", data.pdfFiles);
+        dispatch(setDriveFiles(data.driveFiles));
+        console.log("Received drive files:", data.driveFiles);
       }
     });
      // Listen for initial file list after connecting

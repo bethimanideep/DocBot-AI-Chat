@@ -119,14 +119,14 @@ router.get("/google/drive/files", async (req: any, res: any) => {
 
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-    // Fetch PDF files from Google Drive
+    // Fetch PDF and image files from Google Drive (exclude folders and trashed items)
     const response = await drive.files.list({
-      q: "mimeType='application/pdf'",
+      q: "(mimeType='application/pdf' OR mimeType contains 'image/') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
       fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
     });
 
     if (!response.data.files) {
-      return res.json({ pdfFiles: [] });
+      return res.json({ driveFiles: [] });
     }
 
     // Get all file IDs from the Google Drive response
@@ -145,7 +145,7 @@ router.get("/google/drive/files", async (req: any, res: any) => {
     });
 
     // Prepare the response with sync status
-    const pdfFiles = response.data.files.map((file: any) => ({
+    const driveFiles = response.data.files.map((file: any) => ({
       id: file.id,
       name: file.name,
       webViewLink: file.webViewLink,
@@ -155,7 +155,7 @@ router.get("/google/drive/files", async (req: any, res: any) => {
       synced: syncStatusMap.get(file.id) || false
     }));
 
-    return res.json({ pdfFiles });
+    return res.json({ driveFiles });
   } catch (error) {
     console.error("Error fetching files from Google Drive:", error);
     return res.status(500).json({ error: "Failed to fetch Google Drive files" });

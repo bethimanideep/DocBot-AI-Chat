@@ -73,9 +73,9 @@ const Upload = () => {
         console.log(data.error);
         
       } else {
-        if(data.pdfFiles.length>0)dispatch(setCurrentChatingFile("Gdrive"));
-        dispatch(setDriveFiles(data.pdfFiles));
-        console.log("Received drive files:", data.pdfFiles);
+        if(data.driveFiles && data.driveFiles.length>0) dispatch(setCurrentChatingFile("Gdrive"));
+        dispatch(setDriveFiles(data.driveFiles));
+        console.log("Received drive files:", data.driveFiles);
       }
     });
      // Listen for initial file list after connecting
@@ -147,6 +147,7 @@ const Upload = () => {
           id="file-upload"
           className="hidden"
           multiple
+          accept="application/pdf,image/*"
           onChange={handleFileUpload}
           disabled={isLoading}
         />

@@ -113,8 +113,8 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       }
       showToast("success", "", "Connected To Google Drive");
 
-      const data = await response.json();
-      dispatch(setDriveFiles(data.pdfFiles));
+  const data = await response.json();
+  dispatch(setDriveFiles(data.driveFiles));
       toggleSection("google");
     } catch (error) {
       console.log({ error });

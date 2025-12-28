@@ -17,10 +17,10 @@ const fetchDriveFiles = async () => {
       throw new Error("Failed to fetch Google Drive files");
     }
 
-    const data = await response.json();
+  const data = await response.json();
 
-    // Dispatch the fetched files to the Redux store
-    dispatch(setDriveFiles(data.pdfFiles));
+  // Dispatch the fetched files to the Redux store
+  dispatch(setDriveFiles(data.driveFiles));
   } catch (error) {
     console.error("Error fetching Google Drive files:", error);
     dispatch(setDriveError("Failed to fetch Google Drive files"));
