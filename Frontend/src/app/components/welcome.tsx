@@ -3,8 +3,7 @@ import { Button } from '@/components/ui/button';
 import { FileText, Heart, Laugh, Loader2, MessageSquare, Smile, SmilePlus, Sparkles } from 'lucide-react';
 import { RootState } from './reduxtoolkit/store';
 import { useDispatch, useSelector } from 'react-redux';
-import io from "socket.io-client";
-import { setSocketId, setUploadedFiles, setProgress, setIsLoading, setSocketInstance } from "./reduxtoolkit/socketSlice";
+import { setSocketId, setUploadedFiles, setProgress, setIsLoading } from "./reduxtoolkit/socketSlice";
 import { setDriveFiles } from "./reduxtoolkit/driveSlice";
 import { showToast } from '@/lib/toast';
 
@@ -18,30 +17,31 @@ export const Welcome = () => {
     ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/upload?userId=${userId}`
     : `${process.env.NEXT_PUBLIC_BACKEND_URL}/myuserupload?socketId=${socketId}`;
 
+  const existingSocket = useSelector((state: RootState) => state.socket.socketInstance as any);
+
   useEffect(() => {
-    const newSocket: any = io(`${process.env.NEXT_PUBLIC_BACKEND_URL}`, { withCredentials: true });
-    newSocket.on("connect", () => {
-      dispatch(setSocketId(newSocket.id));
-      console.log("Connected with socket ID:", newSocket.id);
-      console.log({ userId });
+    // Reuse socket created by Providers (or another component) instead of creating a new one here
+    const sock = (window as any).__DOCBOT_SOCKET__ || existingSocket;
+    if (!sock) return; // Providers will create it
 
-      // Join room after connection is established
-      if (userId) {
-        newSocket.emit('joinRoom', userId);
-        console.log(`Attempting to join room ${userId}`);
-      }
-    });
-
-    newSocket.on("progressbar", (message: any) => {
+    // Ensure we don't attach duplicate listeners
+    sock.off("progressbar");
+    sock.on("progressbar", (message: any) => {
       console.log(message);
       dispatch(setProgress(message));
     });
 
-
-    return () => {
-      newSocket.disconnect();
-    };
-  }, [dispatch]);
+    // set socket id if connected
+    if (sock.connected) {
+      dispatch(setSocketId((sock.id as unknown) as string));
+      if (userId) sock.emit("joinRoom", userId);
+    } else {
+      sock.on("connect", () => {
+        dispatch(setSocketId((sock.id as unknown) as string));
+        if (userId) sock.emit("joinRoom", userId);
+      });
+    }
+  }, [dispatch, existingSocket, userId]);
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     dispatch(setIsLoading(true));

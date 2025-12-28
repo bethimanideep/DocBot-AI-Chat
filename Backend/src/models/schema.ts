@@ -49,4 +49,15 @@ const GoogleDriveFile = mongoose.model('GoogleDriveFile', googleDriveFileSchema)
 const UserFile = mongoose.model('LocalFile', userFileSchema);
 const User = mongoose.model('User', userSchema);
 
-export { User, UserFile, GoogleDriveFile };
+// Simple VisitStat model to keep a single document with total visits
+const visitStatSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, unique: true, default: 'site' },
+    totalVisits: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+const VisitStat = mongoose.model('VisitStat', visitStatSchema);
+
+export { User, UserFile, GoogleDriveFile, VisitStat };

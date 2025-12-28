@@ -127,8 +127,63 @@ const io = new Server(server, {
     credentials: true,
   },
 });
+
 io.on("connection", async (socket) => {
   console.log("New client connected");
+  console.log("Active users:", io.sockets.sockets.size);
+
+  try {
+    // Send the current active count to the newly connected socket immediately
+    const activeNow = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+    socket.emit("activeUsers", { count: activeNow });
+
+    // Also broadcast to all other clients about new connection
+    io.emit("userConnected", {
+      socketId: socket.id,
+      activeUsers: activeNow
+    });
+
+  } catch (err) {
+    console.error("Failed to emit activeUsers to newly connected socket:", err);
+  }
+  socket.on('requestActiveCount', () => {
+    try {
+      const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+      socket.emit('activeUsers', { count: activeCount });
+    } catch (err) {
+      console.error('Failed to respond to requestActiveCount:', err);
+    }
+  });
+
+  // Handle visits increment
+  socket.on('incrementVisits', () => {
+    try {
+      // Broadcast to all clients to increment their visit count
+      io.emit('visitIncremented');
+    } catch (err) {
+      console.error('Failed to handle visit increment:', err);
+    }
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log("Client disconnected", socket.id, "reason:", reason);
+    try {
+      // Emit updated active user count when a client disconnects
+      emitActiveUserCount();
+      console.log("After disconnect, active users:", io.of("/").sockets.size || io.sockets.sockets.size || 0);
+
+      // Broadcast disconnection event
+      const remainingCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+      io.emit("userDisconnected", {
+        socketId: socket.id,
+        activeUsers: remainingCount
+      });
+
+    } catch (err) {
+      console.error("Failed to emit active user count on disconnect:", err);
+    }
+  });
+
 
   // Handle room joining first
   socket.on('joinRoom', (userId: string) => {
@@ -140,25 +195,35 @@ io.on("connection", async (socket) => {
     console.log(`Socket ${socket.id} joined room ${userId}`);
   });
 
+  // Helper to emit active user count to all connected clients
+  function emitActiveUserCount() {
+    try {
+      // socket map size for number of connected sockets
+      const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+      io.emit("activeUsers", { count: activeCount });
+    } catch (err) {
+      console.error("Failed to emit active user count:", err);
+    }
+  }
   // Extract cookies manually from socket handshake headers
-   const cookies :any= socket.handshake.headers.cookie;
+  const cookies: any = socket.handshake.headers.cookie;
   let DriveAccessToken = null;
   let userToken = null;
 
-  
+
   // Check if cookies exist before parsing
-let parsedCookies: any = {};
-if (cookies) {
-  try {
-    parsedCookies = cookie.parse(cookies);
-  } catch (error) {
-    console.error('Error parsing cookies:', error);
+  let parsedCookies: any = {};
+  if (cookies) {
+    try {
+      parsedCookies = cookie.parse(cookies);
+    } catch (error) {
+      console.error('Error parsing cookies:', error);
+    }
   }
-}
-console.log('Parsed cookies:', parsedCookies);
+  console.log('Parsed cookies:', parsedCookies);
   console.log(parsedCookies);
-  
-  
+
+
 
   if (parsedCookies) {
     DriveAccessToken = parsedCookies.DriveAccessToken; // Google Drive Access Token
@@ -168,9 +233,11 @@ console.log('Parsed cookies:', parsedCookies);
 
   if (!userToken) {
     console.log("No user token found, not sending file list");
-    return socket.emit("initialFileList", {
+    // Inform client but continue to attach disconnect handler so active user count updates correctly
+    socket.emit("initialFileList", {
       error: "Unauthorized: No access token",
     });
+    return;
   }
 
   try {
@@ -179,17 +246,17 @@ console.log('Parsed cookies:', parsedCookies);
       userToken,
       process.env.JWT_SECRET!
     ) as JwtPayload;
-    console.log({decoded});
-    
+    console.log({ decoded });
+
 
     const userId = decoded.userId;
-    console.log({userId});
-    
+    console.log({ userId });
+
 
     // Fetch the file list for the logged-in user
     const fileList = await UserFile.find({ userId });
-    console.log({fileList});
-    
+    console.log({ fileList });
+
     // Emit the file list to the frontend upon connection
     socket.emit("initialFileList", { fileList });
     console.log("File list sent to client:", fileList);
@@ -226,8 +293,8 @@ console.log('Parsed cookies:', parsedCookies);
         userId,
         fileId: { $in: fileIds }
       });
-      console.log({syncedFiles});
-      
+      console.log({ syncedFiles });
+
 
 
       // Create a map of fileId to sync status
@@ -295,9 +362,82 @@ console.log('Parsed cookies:', parsedCookies);
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
+  // Allow clients to request the current active user count (useful if they attached listeners after connect)
+  socket.on('requestActiveCount', () => {
+    try {
+      const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+      socket.emit('activeUsers', { count: activeCount });
+    } catch (err) {
+      console.error('Failed to respond to requestActiveCount:', err);
+    }
   });
+
+  socket.on("disconnect", (reason) => {
+    console.log("Client disconnected", socket.id, "reason:", reason);
+    try {
+      // Emit updated active user count when a client disconnects
+      emitActiveUserCount();
+      console.log("After disconnect, active users:", io.of("/").sockets.size || io.sockets.sockets.size || 0);
+    } catch (err) {
+      console.error("Failed to emit active user count on disconnect:", err);
+    }
+  });
+});
+
+// Helper to emit active user count to all connected clients
+function emitActiveUserCount() {
+  try {
+    // socket map size for number of connected sockets
+    const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+    io.emit("activeUsers", { count: activeCount });
+  } catch (err) {
+    console.error("Failed to emit active user count:", err);
+  }
+}
+
+// Periodic broadcast to ensure eventual consistency for clients that may have
+// missed a connect/disconnect broadcast (helps with flaky network/tab close cases)
+setInterval(() => {
+  try {
+    emitActiveUserCount();
+  } catch (err) {
+    console.error("Periodic emitActiveUserCount failed:", err);
+  }
+}, 15_000);
+
+io.of("/").adapter.on("created-room", () => {
+  // no-op, but ensures adapter exists in some deployments
+});
+
+
+app.post("/visit", async (req, res) => {
+  try {
+    // Upsert single VisitStat doc with key 'site' and increment atomically
+    const result = await (await import("./models/schema")).VisitStat.findOneAndUpdate(
+      { key: "site" },
+      { $inc: { totalVisits: 1 } },
+      { upsert: true, new: true }
+    ).exec();
+
+    // return new count and active users
+    const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+    res.json({ totalVisits: result.totalVisits, activeUsers: activeCount });
+  } catch (error) {
+    console.error("/visit error:", error);
+    res.status(500).json({ error: "Failed to record visit" });
+  }
+});
+
+app.get("/stats", async (req, res) => {
+  try {
+    const VisitStat = (await import("./models/schema")).VisitStat;
+    const stat = await VisitStat.findOne({ key: "site" }).lean().exec();
+    const total = stat ? stat.totalVisits : 0;
+    res.json({ totalVisits: total });
+  } catch (error) {
+    console.error("/stats error:", error);
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
 });
 
 // Use an environment-configurable model name to avoid hardcoding a model that may be
@@ -540,14 +680,14 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
     await batcher.do();
 
     // Mark as synced after successful processing
-    const updatedFile :any= await GoogleDriveFile.findByIdAndUpdate(
+    const updatedFile: any = await GoogleDriveFile.findByIdAndUpdate(
       existingFile._id,
       { synced: true },
       { new: true }
     );
 
     io.to(userId).emit('fileSyncStatusUpdate', {
-      _id:updatedFile._id,
+      _id: updatedFile._id,
       fileId: fileMetadata.id,
       synced: true
     });
@@ -560,9 +700,9 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
 
   } catch (error: unknown) {
     console.error("Error syncing Google Drive file:", error);
-    
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Error syncing file",
       error: process.env.NODE_ENV === 'development' ? errorMessage : undefined
     });
@@ -761,7 +901,7 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
   try {
     const { query, userId, sourceType } = req.body;
     console.log({ query, userId, sourceType });
-    
+
     if (!query || !userId || !sourceType) {
       return res.status(400).json({ message: "Query, userId, and sourceType are required" });
     }
@@ -798,7 +938,7 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
         .withNearVector({ vector: queryEmbedding })
         .withLimit(3)
         .do();
-      
+
       const documents = result.data?.Get?.Cwd || [];
       return documents.map((doc: any) => new Document({
         pageContent: doc.text,
@@ -837,10 +977,10 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
     });
 
     // Process the query
-    const data=await chain.call({
+    const data = await chain.call({
       query: query,
     });
-    console.log({data:data.sourceDocuments});
+    console.log({ data: data.sourceDocuments });
 
   } catch (error) {
     console.error("Search error:", error);
@@ -853,7 +993,7 @@ app.post("/userfilechat", async (req: any, res: any) => {
   try {
     const { query, fileId } = req.body;
     console.log(query, fileId);
-    
+
     if (!query || !fileId) {
       return res.status(400).json({ message: "Query and fileId are required" });
     }
@@ -888,7 +1028,7 @@ app.post("/userfilechat", async (req: any, res: any) => {
         .withNearVector({ vector: queryEmbedding })
         .withLimit(3)
         .do();
-      
+
       const documents = result.data?.Get?.Cwd || [];
       return documents.map((doc: any) => new Document({
         pageContent: doc.text,
@@ -927,11 +1067,11 @@ app.post("/userfilechat", async (req: any, res: any) => {
     });
 
     // Process the query
-    const data=await chain.call({
+    const data = await chain.call({
       query: query,
     });
-    console.log({data:data.sourceDocuments});
-    
+    console.log({ data: data.sourceDocuments });
+
 
   } catch (error) {
     console.error("Search error:", error);

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { store } from "./components/reduxtoolkit/store";
 import Providers from "./components/reduxtoolkit/Providers";
+import CornerStats from "@/components/ui/corner-stats";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -26,6 +27,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             {children}
+            <CornerStats />
             <Toaster />
           </ThemeProvider>
         </Providers>
