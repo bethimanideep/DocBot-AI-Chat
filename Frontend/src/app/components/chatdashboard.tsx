@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Sparkles,ExternalLink } from "lucide-react";
+import { Send, Sparkles, ExternalLink } from "lucide-react";
 import { RootState } from "./reduxtoolkit/store";
 import { useSelector } from "react-redux";
 import { showToast } from "@/lib/toast";
@@ -41,29 +41,6 @@ export const Chat = () => {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
-  useEffect(() => {
-    setMounted(true);
-    
-    // Fix: Prevent scroll on mount
-    setTimeout(() => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    }, 100);
-    
-    // Also lock scroll during initial load
-    document.body.style.overflow = 'hidden';
-    setTimeout(() => {
-      document.body.style.overflow = 'auto';
-    }, 500);
-    
-    return () => {
-      // Clean up any ongoing requests when component unmounts
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
 
 
   useEffect(() => {
@@ -96,6 +73,46 @@ export const Chat = () => {
       setNewMessage("");
       return;
     }
+
+    // Add this useEffect right after your existing useEffects
+    useEffect(() => {
+      // Force scroll to top on initial mount and after all code execution
+      const forceScrollToTop = () => {
+        // Scroll to top immediately
+        window.scrollTo({
+          top: 0,
+          left: 0,
+          behavior: 'auto'
+        });
+
+        // Also set scroll position on document elements
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+
+        // Force stay at top (useful for mobile browsers)
+        let scrollAttempts = 0;
+        const forceTopInterval = setInterval(() => {
+          window.scrollTo(0, 0);
+          scrollAttempts++;
+
+          // Stop after 5 attempts or 500ms
+          if (scrollAttempts >= 5) {
+            clearInterval(forceTopInterval);
+          }
+        }, 100);
+      };
+
+      // Execute immediately when component mounts
+      forceScrollToTop();
+
+      // Also execute after a short delay to catch any post-render layout shifts
+      const timeoutId = setTimeout(forceScrollToTop, 100);
+
+      // Cleanup
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }, []); // Empty dependency array means this runs once on mount
 
     // Reset to welcome message when file changes
     setMessages([
@@ -296,8 +313,8 @@ export const Chat = () => {
             >
               <div
                 className={`max-w-[85%] p-3 sm:p-4 md:p-3 ${message.sender === "user"
-                     ? "bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-500 dark:to-indigo-500 text-white ml-auto rounded-xl sm:rounded-2xl rounded-tr-sm border border-white/10 shadow-[0_4px_14px_rgba(124,58,237,0.25)]"
-                    : "bg-transparent dark:bg-transparent text-gray-800 dark:text-gray-200 p-0 shadow-none border-0 rounded-none max-w-full break-words overflow-hidden"
+                  ? "bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-500 dark:to-indigo-500 text-white ml-auto rounded-xl sm:rounded-2xl rounded-tr-sm border border-white/10 shadow-[0_4px_14px_rgba(124,58,237,0.25)]"
+                  : "bg-transparent dark:bg-transparent text-gray-800 dark:text-gray-200 p-0 shadow-none border-0 rounded-none max-w-full break-words overflow-hidden"
 
 
                   }`}
@@ -312,19 +329,19 @@ export const Chat = () => {
 
                 {message.sourceDocuments && (
                   <div className={`mt-3 sm:mt-4 pt-3 sm:pt-4 ${message.sender === "user"
-                      ? "border-t border-white/10"
-                      : "border-t border-gray-100 dark:border-gray-800"
+                    ? "border-t border-white/10"
+                    : "border-t border-gray-100 dark:border-gray-800"
                     }`}>
                     <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-2 mb-2 sm:mb-3 ${message.sender === "user"
-                        ? "text-white/90"
-                        : "text-gray-600 dark:text-gray-400"
+                      ? "text-white/90"
+                      : "text-gray-600 dark:text-gray-400"
                       }`}>
                       Sources <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-pulse" />
                     </p>
                     {message.sourceDocuments.map((doc, index) => (
                       <p key={index} className={`text-[11px] sm:text-[12px] md:text-[13px] ${message.sender === "user"
-                          ? "text-white/80"
-                          : "text-gray-600 dark:text-gray-400"
+                        ? "text-white/80"
+                        : "text-gray-600 dark:text-gray-400"
                         } leading-relaxed`}>
                         {doc.pageContent?.substring(0, 100)}...
                       </p>
@@ -332,8 +349,8 @@ export const Chat = () => {
                   </div>
                 )}
                 <div className={`flex items-center justify-end mt-2 sm:mt-3 gap-1.5 sm:gap-2 ${message.sender === "user"
-                    ? "text-white/70"
-                    : "text-gray-500 dark:text-gray-500"
+                  ? "text-white/70"
+                  : "text-gray-500 dark:text-gray-500"
                   }`}>
                   <span className="text-[10px] sm:text-[11px] font-medium tracking-wider">
                     {new Date(message.timestamp).toLocaleTimeString([], {
@@ -444,7 +461,7 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
             key={i}
             className="p-1 sm:p-1 bg-white dark:bg-[#121212]"
           >
-                {isHeading && (
+            {isHeading && (
               <>
                 <h3
                   className="
@@ -460,7 +477,7 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
               </>
             )}
 
-                <div className="space-y-2 text-gray-800 dark:text-gray-300 text-[13px] sm:text-[14px] leading-relaxed">
+            <div className="space-y-2 text-gray-800 dark:text-gray-300 text-[13px] sm:text-[14px] leading-relaxed">
               {rest.map((line, idx) => {
                 /* LABEL: VALUE (Phone, Email, Location, etc.) */
                 const labelMatch = line.match(/^([^:]+):\s*(.+)$/);
