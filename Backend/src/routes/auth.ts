@@ -216,13 +216,11 @@ router.post("/login", async (req:any, res:any) => {
     // Set tokens in cookies
     res.cookie("token", token, {
       httpOnly: true,
-      partitioned: true,
       secure: true,
       sameSite: "none",
     });
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      partitioned: true,
       secure: true,
       sameSite: "none",
     });
@@ -276,13 +274,11 @@ router.post("/verify-otp", async (req:any, res:any) => {
       // Set tokens in cookies
       res.cookie("token", token, {
         httpOnly: true,
-        partitioned: true,
         secure: true,
         sameSite: "none",
       });
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
-        partitioned: true,
         secure: true,
         sameSite: "none",
       });
@@ -302,10 +298,6 @@ router.post("/logout", (req:any, res:any) => {
   res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "none" });
   res.clearCookie("refreshToken", { httpOnly: true, secure: true, sameSite: "none" });
   res.clearCookie("DriveAccessToken", { httpOnly: true, secure: true, sameSite: "none" });
-  res.clearCookie("GoogleaccessToken", { httpOnly: true, secure: true, sameSite: "none" });
-  res.clearCookie("userId", { httpOnly: true, secure: true, sameSite: "none" });
-  res.clearCookie("username", { httpOnly: true, secure: true, sameSite: "none" });
-
   return res.status(200).json({ message: "Logout successful" });
 });
 router.post("/drivelogout", (req:any, res:any) => {
