@@ -397,19 +397,21 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
 
   const blocks = text
     .split(/\n\n+/)
-    .map(b => b.trim())
+    .map((b) => b.trim())
     .filter(Boolean);
 
   return (
     <div className="space-y-5 break-words max-w-full">
       {blocks.map((block, i) => {
-        const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
+        const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
 
-        // 🔥 ORIGINAL HEADING LOGIC
-        const first = lines[0];
+        // Strip simple markdown emphasis markers from the first line for heading detection
+        const first = lines[0] || "";
+        const firstStripped = first.replace(/\*\*/g, "").replace(/\*/g, "").replace(/`/g, "");
+
         const isHeading =
-          /^[A-Z].*:$/i.test(first) || // Title:
-          /^#+\s/.test(first) ||       // Markdown #
+          /^[A-Z].*:$/i.test(firstStripped) || // Title:
+          /^#+\s/.test(first) || // Markdown #
           /^\*\*(.+)\*\*$/.test(first); // **Title**
 
         const rest = isHeading ? lines.slice(1) : lines;
@@ -419,7 +421,7 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
             key={i}
             className="p-1 sm:p-1 bg-white dark:bg-[#121212]"
           >
-            {isHeading && (
+                {isHeading && (
               <>
                 <h3
                   className="
@@ -429,18 +431,20 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
                     mb-2
                   "
                 >
-                  {first.replace(/\*\*/g, "").replace(/#+\s/, "")}
+                  {firstStripped.replace(/#+\s/, "")}
                 </h3>
                 <div className="h-px bg-gradient-to-r from-violet-500 to-indigo-500 opacity-30 mb-3" />
               </>
             )}
 
-            <div className="space-y-2 text-gray-800 dark:text-gray-300 text-[13px] sm:text-[14px] leading-relaxed">
+                <div className="space-y-2 text-gray-800 dark:text-gray-300 text-[13px] sm:text-[14px] leading-relaxed">
               {rest.map((line, idx) => {
                 /* LABEL: VALUE (Phone, Email, Location, etc.) */
                 const labelMatch = line.match(/^([^:]+):\s*(.+)$/);
                 if (labelMatch) {
-                  const [, label, value] = labelMatch;
+                  const [, labelRaw, valueRaw] = labelMatch;
+                  const label = labelRaw.replace(/\*\*/g, "").replace(/\*/g, "").trim();
+                  const value = valueRaw.replace(/\*\*/g, "").replace(/\*/g, "").trim();
                   const normalized = normalizeValue(label, value);
 
                   return (
@@ -465,7 +469,8 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
                       <p className="font-semibold text-indigo-600 dark:text-indigo-400">
                         {line
                           .replace(/^\d+\.\s*/, "")
-                          .replace(/\*\*/g, "")}
+                          .replace(/\*\*/g, "")
+                          .replace(/\*/g, "")}
                       </p>
                     </div>
                   );
@@ -477,7 +482,7 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
                     <p key={idx} className="flex items-start gap-2 ml-2">
                       <span className="mt-1 text-indigo-500">•</span>
                       <Linkify options={linkifyOptions}>
-                        {line.replace(/^[-*+]\s/, "").trim()}
+                        {line.replace(/^[-*+]\s/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim()}
                       </Linkify>
                     </p>
                   );
@@ -487,7 +492,7 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
                   return (
                     <p key={idx}>
                       <Linkify options={linkifyOptions}>
-                        {line}
+                        {line.replace(/\*\*/g, "").replace(/\*/g, "")}
                       </Linkify>
                     </p>
                   );
@@ -496,7 +501,7 @@ const DynamicStyledBlock = ({ text }: { text: string }) => {
                 return (
                   <p key={idx}>
                     <Linkify options={linkifyOptions}>
-                      {line}
+                      {line.replace(/\*\*/g, "").replace(/\*/g, "")}
                     </Linkify>
                   </p>
                 );

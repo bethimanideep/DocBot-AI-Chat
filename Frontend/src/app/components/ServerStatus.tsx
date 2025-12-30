@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { showToast } from "@/lib/toast";
 
 export default function ServerStatus() {
   const [isChecking, setIsChecking] = useState(true);
@@ -12,12 +13,6 @@ export default function ServerStatus() {
     const checkServerStatus = async () => {
       try {
         setIsChecking(true);
-        
-        // Show loading notification
-        const loadingToast = toast.loading("Checking server status...", {
-          id: "server-check",
-        });
-
         // Try to fetch from the server
         const response = await fetch("https://docbot-ai-chat.onrender.com/", {
           method: "GET",
@@ -31,10 +26,7 @@ export default function ServerStatus() {
           const data = await response.text();
           if (data.toLowerCase().includes("hi")) {
             setServerUp(true);
-            toast.success("Server is ready!", {
-              id: loadingToast,
-              duration: 3000,
-            });
+            showToast("success", "Render Server is ready!");
           } else {
             throw new Error("Unexpected response");
           }
@@ -45,10 +37,8 @@ export default function ServerStatus() {
         console.error("Server check failed:", error);
         
         // Show spinning up notification
-        toast.warning("Render server is spinning up, please wait...", {
-          id: "server-spinning",
-          duration: 5000, // Show for 5 seconds initially
-        });
+  
+        showToast("warning", "Render server is spinning up, please wait...");
 
         // Retry logic - try 10 times with increasing delay
         let retries = 0;
@@ -56,10 +46,7 @@ export default function ServerStatus() {
         
         const retryCheck = async () => {
           if (retries >= maxRetries) {
-            toast.error("Server is taking too long to start. Please refresh the page.", {
-              id: "server-timeout",
-              duration: 10000,
-            });
+            showToast("warning", "Render is taking too long to start. Please refresh the page.");
             setIsChecking(false);
             return;
           }
@@ -78,10 +65,7 @@ export default function ServerStatus() {
                 const data = await response.text();
                 if (data.toLowerCase().includes("hi")) {
                   setServerUp(true);
-                  toast.success("Server is now ready!", {
-                    id: "server-ready",
-                    duration: 3000,
-                  });
+                  showToast("success", "Render Server is ready!");
                   setIsChecking(false);
                 } else {
                   retryCheck();
