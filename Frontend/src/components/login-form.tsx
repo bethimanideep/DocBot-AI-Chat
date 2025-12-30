@@ -37,7 +37,6 @@ export function LoginForm({
       });
 
       const data = await response.json();
-      console.log("Login Response:", data);
 
       if (response.ok) {
         showToast("success", "", data.message);
@@ -57,14 +56,6 @@ export function LoginForm({
       alert("An error occurred. Please try again.");
     }
 
-    // const response = await fetch("process.env.NEXT_PUBLIC_BACKEND_URL", {
-    //   method: "GET",
-    //   headers: { "Content-Type": "application/json" },
-    //   credentials: 'include',
-    // });
-
-    // const data = await response.json();
-    // console.log("Login Responsee:", data);
   };
 
   return (

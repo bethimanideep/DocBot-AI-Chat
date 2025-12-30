@@ -39,7 +39,6 @@ export default function Home() {
         const cleanUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
 
-        console.log('User authenticated via URL parameters');
         return;
       }
 
@@ -50,7 +49,6 @@ export default function Home() {
       if (storedUsername && storedUserId) {
         dispatch(setUsername(storedUsername));
         dispatch(setUserId(storedUserId));
-        console.log('User authenticated from localStorage');
       }
 
     } catch (error) {

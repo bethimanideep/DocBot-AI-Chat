@@ -27,7 +27,6 @@ export function Otp({ email ,onClose}: any) {
       });
 
       const data = await response.json();
-      console.log("OTP Verification Response:", data);
 
       if (response.ok) {
         showToast("success", "", data.message);

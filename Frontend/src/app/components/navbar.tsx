@@ -19,6 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ChevronDownIcon, UserIcon } from "lucide-react";
+import Avatar from "./ui/avatar";
 import { ModeToggle } from "./darkmode/modeToggle";
 import { Login } from "./login";
 import { setUploadedFiles, setUserId, setUsername } from "./reduxtoolkit/socketSlice";
@@ -40,7 +41,6 @@ export default function Navbar() {
   const dispatch = useDispatch();
   const handleLogout = async () => {
     try {
-      console.log('Backend URL:', process.env.NEXT_PUBLIC_BACKEND_URL);
       
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/logout`, {
         method: "POST",
@@ -49,7 +49,6 @@ export default function Navbar() {
       const data = await response.json();
       if (response.ok) {
         showToast("success", "Logged Out", "You have been logged out successfully.");
-        console.log(data);
         dispatch(setUsername(null));
         dispatch(setUploadedFiles([]as any));
         dispatch(setUserId(null));
@@ -100,9 +99,10 @@ export default function Navbar() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  className="h-8 text-xs px-2 sm:h-9 sm:px-3 sm:text-sm md:h-10 md:px-4 flex items-center gap-1"
+                  className="h-8 text-xs px-2 sm:h-9 sm:px-3 sm:text-sm md:h-10 md:px-4 flex items-center gap-2"
                 >
-                  {username}
+                  <Avatar name={username} size="sm" className="flex-shrink-0" status={"online"} />
+                  <span className="max-w-[140px] truncate">{username}</span>
                   <ChevronDownIcon className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>

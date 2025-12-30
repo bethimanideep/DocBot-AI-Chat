@@ -107,16 +107,7 @@ const weaviateClient = weaviate.client({
   apiKey: new weaviate.ApiKey(weaviateApiKey),
 });
 
-const client = createClient({
-  username: process.env.REDISNAME,
-  password: process.env.REDISPASSWORD,
-  socket: {
-    host: process.env.REDISHOST,
-    port: Number(process.env.REDISPORT),
-  },
-});
 
-client.on("error", (err) => console.log("Redis Client Error", err));
 
 
 
@@ -130,7 +121,6 @@ const io = new Server(server, {
 
 io.on("connection", async (socket) => {
   console.log("New client connected");
-  console.log("Active users:", io.sockets.sockets.size);
 
   try {
     // Send the current active count to the newly connected socket immediately
@@ -170,7 +160,6 @@ io.on("connection", async (socket) => {
     try {
       // Emit updated active user count when a client disconnects
       emitActiveUserCount();
-      console.log("After disconnect, active users:", io.of("/").sockets.size || io.sockets.sockets.size || 0);
 
       // Broadcast disconnection event
       const remainingCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
@@ -192,7 +181,6 @@ io.on("connection", async (socket) => {
       return;
     }
     socket.join(userId);
-    console.log(`Socket ${socket.id} joined room ${userId}`);
   });
 
   // Helper to emit active user count to all connected clients
@@ -220,19 +208,15 @@ io.on("connection", async (socket) => {
       console.error('Error parsing cookies:', error);
     }
   }
-  console.log('Parsed cookies:', parsedCookies);
-  console.log(parsedCookies);
 
 
 
   if (parsedCookies) {
     DriveAccessToken = parsedCookies.DriveAccessToken; // Google Drive Access Token
     userToken = parsedCookies.token; // User JWT Token
-    console.log({ DriveAccessToken, userToken });
   }
 
   if (!userToken) {
-    console.log("No user token found, not sending file list");
     // Inform client but continue to attach disconnect handler so active user count updates correctly
     socket.emit("initialFileList", {
       error: "Unauthorized: No access token",
@@ -246,20 +230,16 @@ io.on("connection", async (socket) => {
       userToken,
       process.env.JWT_SECRET!
     ) as JwtPayload;
-    console.log({ decoded });
 
 
     const userId = decoded.userId;
-    console.log({ userId });
 
 
     // Fetch the file list for the logged-in user
     const fileList = await UserFile.find({ userId });
-    console.log({ fileList });
 
     // Emit the file list to the frontend upon connection
     socket.emit("initialFileList", { fileList });
-    console.log("File list sent to client:", fileList);
   } catch (error: any) {
     console.error("Invalid user token:", error.message);
     socket.emit("initialFileList", { error: "Invalid or expired token" });
@@ -293,7 +273,6 @@ io.on("connection", async (socket) => {
         userId,
         fileId: { $in: fileIds }
       });
-      console.log({ syncedFiles });
 
 
 
@@ -335,7 +314,6 @@ io.on("connection", async (socket) => {
       }
     }
   } else {
-    console.log("No Google Drive access token found");
     socket.emit("driveFilesResponse", {
       error: "Google Drive not connected",
       actionRequired: "connect"
@@ -514,11 +492,6 @@ async function processPdf(fileBuffer: Buffer): Promise<string[]> {
   if (!text || text.trim().length < 20) {
     throw new Error("Extracted text is empty or too short");
   }
-
-  console.log("------- Extracted Text Preview -------");
-  console.log(text.substring(0, 500) + "..."); // Show preview only
-  console.log("------- Extracted Text End -------");
-
   // Split text into chunks
   const splitter = new TokenTextSplitter({
     encodingName: "gpt2",
@@ -739,13 +712,11 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
       });
 
       const fileId = fileMetadata._id.toString(); // Use MongoDB's _id as fileId
-      console.log("MongoDB _id used as fileId:", fileId);
 
       // Allow PDFs, images, and Word documents
       if (file.mimetype === "application/pdf") {
         // Process PDF and generate embeddings (existing logic - unchanged)
         const chunks = await processPdf(file.buffer);
-        console.log({ FileName: file.originalname, Chunks: chunks.length });
 
         // Embed all chunks in one API call
         const embeddingsArray = await embeddings.embedDocuments(chunks);
@@ -769,7 +740,6 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
       } else if (file.mimetype.startsWith("image/")) {
         // Process image using OCR and generate embeddings
         const chunks = await processImage(file.buffer);
-        console.log({ FileName: file.originalname, Chunks: chunks.length });
 
         const embeddingsArray = await embeddings.embedDocuments(chunks);
 
@@ -796,7 +766,6 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
       ) {
         // Process Word document (DOCX/DOC) using mammoth
         const chunks = await processDocx(file.buffer);
-        console.log({ FileName: file.originalname, Chunks: chunks.length });
 
         const embeddingsArray = await embeddings.embedDocuments(chunks);
 
@@ -900,7 +869,6 @@ app.post("/search", async (req: any, res: any) => {
 app.post("/userlocalfiles", async (req: any, res: any) => {
   try {
     const { query, userId, sourceType } = req.body;
-    console.log({ query, userId, sourceType });
 
     if (!query || !userId || !sourceType) {
       return res.status(400).json({ message: "Query, userId, and sourceType are required" });
@@ -980,7 +948,6 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
     const data = await chain.call({
       query: query,
     });
-    console.log({ data: data.sourceDocuments });
 
   } catch (error) {
     console.error("Search error:", error);
@@ -992,7 +959,6 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
 app.post("/userfilechat", async (req: any, res: any) => {
   try {
     const { query, fileId } = req.body;
-    console.log(query, fileId);
 
     if (!query || !fileId) {
       return res.status(400).json({ message: "Query and fileId are required" });
@@ -1070,7 +1036,6 @@ app.post("/userfilechat", async (req: any, res: any) => {
     const data = await chain.call({
       query: query,
     });
-    console.log({ data: data.sourceDocuments });
 
 
   } catch (error) {
@@ -1099,7 +1064,6 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
 
     // Check if vector store exists for the given fileId
     if (!userRetrievers[userId][fileId]) {
-      console.log(`Fetching embeddings from Weaviate for fileId: ${fileId}`);
 
       // Fetch embeddings for the specific fileId from Weaviate
       const result = await weaviateClient.graphql
@@ -1160,11 +1124,9 @@ app.post("/userfilechatmemory", async (req: any, res: any) => {
       k: 1,
     });
 
-    console.log("Running query on vector store...");
     const chain = RetrievalQAChain.fromLLM(llm, retriever);
     const response = await chain.call({ query });
 
-    console.log("Response:", response);
     res.status(200).json({ answer: response.text || "No answer found." });
   } catch (error) {
     console.error("Error:", error);
@@ -1183,7 +1145,6 @@ app.post("/searchbyfile", async (req: any, res: any) => {
     }
 
     if (!userRetrievers[file_name]) {
-      console.log("No Data Exists");
 
       // Query Weaviate with metadata filter
       const response = await weaviateClient.graphql
@@ -1334,7 +1295,6 @@ app.post(
       for (const file of files) {
         // Allow PDFs, images, and Word documents
         if (file.mimetype === "application/pdf") {
-          console.log(`Processing PDF: ${file.originalname}`);
 
           // Process PDF and get chunks (existing logic)
           const chunks = await processPdf(file.buffer);
@@ -1368,7 +1328,6 @@ app.post(
             documents
           );
         } else if (file.mimetype.startsWith("image/")) {
-          console.log(`Processing image: ${file.originalname}`);
           const chunks = await processImage(file.buffer);
 
           if (!chunks || chunks.length === 0) {
@@ -1403,7 +1362,6 @@ app.post(
           file.originalname.toLowerCase().endsWith('.docx') ||
           file.originalname.toLowerCase().endsWith('.doc')
         ) {
-          console.log(`Processing DOC/DOCX: ${file.originalname}`);
           const chunks = await processDocx(file.buffer);
 
           if (!chunks || chunks.length === 0) {
@@ -1466,7 +1424,6 @@ app.post("/chat", async (req: any, res: any) => {
   try {
     const { query, file_name, socketId } = req.body;
 
-    console.log("Received request:", { query, file_name, socketId });
 
     if (!query || !file_name || !socketId) {
       return res
@@ -1475,23 +1432,18 @@ app.post("/chat", async (req: any, res: any) => {
     }
 
     if (!userRetrievers[socketId]) {
-      console.log(`No retriever found for socketId: ${socketId}`);
       return res.status(400).json({ error: "Upload files first." });
     }
 
     const userFiles = userRetrievers[socketId];
 
     if (file_name !== "Local Files" && !userFiles[file_name]) {
-      console.log(
-        `File not found for socketId: ${socketId}, file: ${file_name}`
-      );
       return res.status(400).json({ error: "File not found." });
     }
 
     let retriever;
 
     if (file_name === "Local Files") {
-      console.log("Querying all retrievers...");
 
       const vectorStores = Object.values(userFiles)
         .map((fileData: any) => fileData.vectorStore)
@@ -1555,7 +1507,6 @@ app.post("/chat", async (req: any, res: any) => {
 
 
 app.get("/", (req, res) => {
-  console.log("hi");
 
   res.send("hi");
 });
@@ -1566,8 +1517,6 @@ server.listen(process.env.SERVERPORT ?? 4000, async () => {
   try {
     await mongoose.connect(`${process.env.MONGO_URI}`);
     console.log("Connected to MongoDB");
-    // await client.connect();
-    console.log("connected to redis");
     console.log(
       `Server is running on http://localhost:${process.env.SERVERPORT ?? 4000}`
     );
@@ -1581,7 +1530,6 @@ server.listen(process.env.SERVERPORT ?? 4000, async () => {
 process.on("SIGINT", async () => {
   console.log("Received SIGINT. Cleaning up...");
   await mongoose.disconnect(); // Close MongoDB connection
-  await client.disconnect();
   console.log("Database connection closed");
   process.exit(0);
 });

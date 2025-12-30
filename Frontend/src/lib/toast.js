@@ -2,8 +2,6 @@ import { toast } from "sonner";
 import { CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
 export const showToast = (type, message, description) => {
-  console.log({description});
-  console.log({message});
   
   const toastConfig = {
     success: {

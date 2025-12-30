@@ -45,7 +45,6 @@ export const Welcome = () => {
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     dispatch(setIsLoading(true));
-    console.log({ isLoading });
     dispatch(setProgress(25));
 
     const files = event.target.files;
@@ -65,8 +64,6 @@ export const Welcome = () => {
         body: formData,
       });
       const data = await response.json();
-      console.log({ data });
-
       if (response.ok) {
         dispatch(setUploadedFiles(data.fileList));
         showToast("success", "Uploaded successfully", data.message);

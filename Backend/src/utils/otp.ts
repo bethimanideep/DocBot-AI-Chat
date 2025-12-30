@@ -16,7 +16,6 @@ const transporter = nodemailer.createTransport({
 
 export const sendOTP = async (user: any, email: string) => {
   try {
-    console.log(process.env.EMAIL,process.env.PASSWORD);
     
     const otp = crypto.randomInt(100000, 999999).toString();
     const otpExpiresAt = new Date(Date.now() + 10 * 60000); // OTP valid for 10 minutes

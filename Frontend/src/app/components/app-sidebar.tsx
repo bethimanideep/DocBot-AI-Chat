@@ -51,7 +51,6 @@ export function AppSidebar() {
   const dispatch = useDispatch(); 
   const handleLogout = async () => {
       try {
-        console.log("went");
         
         const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}`, {
           method: "GET",
@@ -59,7 +58,6 @@ export function AppSidebar() {
         });
         const data = await response.json();
         if (response.ok) {
-          console.log(data);
           dispatch(setUsername(null));
           // router.push("/login"); // Redirect to login page after logout
         } else {

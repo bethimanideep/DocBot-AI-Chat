@@ -39,7 +39,6 @@ const Upload = () => {
   }, [driveFiles]);
 
   useEffect(() => {
-    console.log("Before:", driveFiles);
     // Attach listeners to the shared socket instance (provided by Providers)
     const sock = (window as any).__DOCBOT_SOCKET__ as any | undefined || existingSocket;
     if (!sock) return; // Providers will create it; this effect will run again when sock becomes available on remount
@@ -50,7 +49,6 @@ const Upload = () => {
     sock.off("initialFileList");
 
     sock.on('fileSyncStatusUpdate', ({ fileId, synced, _id }: FileSyncCompleteEvent) => {
-      console.log("received response");
       const updatedFiles = driveFilesRef.current.map((f: any) =>
         f.id === fileId ? { ...f, synced, _id } : f
       );
@@ -64,7 +62,6 @@ const Upload = () => {
       } else {
         if (data.driveFiles && data.driveFiles.length > 0) dispatch(setCurrentChatingFile("Gdrive"));
         dispatch(setDriveFiles(data.driveFiles));
-        console.log("Received drive files:", data.driveFiles);
       }
     });
 
@@ -74,14 +71,12 @@ const Upload = () => {
         if (data.error == "Invalid or expired token") {
           showToast("error", "Session Expired", data.error);
           try {
-            console.log('Backend URL:', process.env.NEXT_PUBLIC_BACKEND_URL);
             const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/logout`, {
               method: "POST",
               credentials: "include",
             });
             const data = await response.json();
             if (response.ok) {
-              console.log(data);
               dispatch(setUsername(null));
               dispatch(setUploadedFiles([] as any));
               dispatch(setUserId(null));
@@ -97,14 +92,12 @@ const Upload = () => {
       } else {
         if (data.fileList.length > 0) dispatch(setCurrentChatingFile("Local Files"));
         dispatch(setUploadedFiles(data.fileList));
-        console.log("Received initial file list:", data.fileList);
       }
     });
 
     // Also ensure progressbar and connect handlers are set
     sock.off("progressbar");
     sock.on("progressbar", (message: any) => {
-      console.log(message);
       dispatch(setProgress(message));
     });
 
@@ -131,7 +124,6 @@ const Upload = () => {
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     dispatch(setIsLoading(true));
-    console.log({ isLoading });
     dispatch(setProgress(25));
 
     const files = event.target.files;
@@ -151,7 +143,6 @@ const Upload = () => {
         body: formData,
       });
       const data = await response.json();
-      console.log({ data });
 
       if (response.ok) {
         dispatch(setUploadedFiles(data.fileList));

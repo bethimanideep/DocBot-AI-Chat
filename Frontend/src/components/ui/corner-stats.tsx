@@ -30,7 +30,6 @@ export default function CornerStats() {
 
   // API functions - KEEP AS IS
   const recordVisit = async (): Promise<{ totalVisits: number; activeUsers: number }> => {
-    console.log("visit");
     
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/visit`, {
@@ -94,8 +93,7 @@ export default function CornerStats() {
     // SIMPLIFIED: Single function to initialize stats
     const initializeStats = async () => {
       const hasVisited = sessionStorage.getItem('visitRecorded');
-      console.log({hasVisited,hasRecordedVisit:hasRecordedVisit.current});
-      
+   
       
       if (!hasVisited && !hasRecordedVisit.current) {
         try {

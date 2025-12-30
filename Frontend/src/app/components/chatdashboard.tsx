@@ -5,7 +5,8 @@ import { useSelector } from "react-redux";
 import { showToast } from "@/lib/toast";
 import Linkify from 'linkify-react';
 import { useMemo } from 'react';
-
+import { Check, ChevronRight, Award, Target, Zap, Users, Clock, Briefcase, Code, Star } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Message {
   id: number;
@@ -368,6 +369,8 @@ export const Chat = () => {
     </div>
   );
 };
+
+
 const DynamicStyledBlock = ({ text }: { text: string }) => {
   if (!text) return null;
 
