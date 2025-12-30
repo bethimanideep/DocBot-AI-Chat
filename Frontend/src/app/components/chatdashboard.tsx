@@ -44,7 +44,6 @@ export const Chat = () => {
   
 
   useEffect(() => {
-    scrollToBottom();
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -90,48 +89,6 @@ export const Chat = () => {
       abortControllerRef.current = null;
     }
   }, [currentChatingFile]);
-
-
-
-  // Add this useEffect right after your existing useEffects
-useEffect(() => {
-  // Force scroll to top on initial mount and after all code execution
-  const forceScrollToTop = () => {
-    // Scroll to top immediately
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: 'auto'
-    });
-    
-    // Also set scroll position on document elements
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-    
-    // Force stay at top (useful for mobile browsers)
-    let scrollAttempts = 0;
-    const forceTopInterval = setInterval(() => {
-      window.scrollTo(0, 0);
-      scrollAttempts++;
-      
-      // Stop after 5 attempts or 500ms
-      if (scrollAttempts >= 5) {
-        clearInterval(forceTopInterval);
-      }
-    }, 100);
-  };
-
-  // Execute immediately when component mounts
-  forceScrollToTop();
-  
-  // Also execute after a short delay to catch any post-render layout shifts
-  const timeoutId = setTimeout(forceScrollToTop, 100);
-  
-  // Cleanup
-  return () => {
-    clearTimeout(timeoutId);
-  };
-}, []); // Empty dependency array means this runs once on mount
 
   const handleStreamingResponse = async (query: string) => {
     if (currentChatingFile == null) {
