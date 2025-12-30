@@ -41,9 +41,6 @@ export function Login() {
           <DialogTitle className="text-xl font-semibold mb-2">
             Login
           </DialogTitle>
-          <DialogDescription className="text-gray-500 dark:text-gray-400 mb-4">
-            Sign in to access your account and manage your files
-          </DialogDescription>
           <div className="flex flex-col items-center justify-center gap-6 p-4">
             <div className="flex w-full max-w-sm flex-col gap-6">
               <LoginForm onClose={handleClosePopup} />

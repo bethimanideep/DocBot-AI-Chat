@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { store } from "./components/reduxtoolkit/store";
 import Providers from "./components/reduxtoolkit/Providers";
 import CornerStats from "@/components/ui/corner-stats";
+import ServerStatus from "./components/ServerStatus"; // or ServerStatusBar
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -26,12 +27,16 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
+            {/* Add Server Status Component */}
+            <ServerStatus />
+            {/* Or use ServerStatusBar for persistent notification bar */}
+            {/* <ServerStatusBar /> */}
+            
             {children}
             <CornerStats />
             <Toaster />
           </ThemeProvider>
         </Providers>
-        
       </body>
     </html>
   );
