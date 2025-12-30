@@ -36,14 +36,36 @@ export const Chat = () => {
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const initialRenderRef = useRef(true);
+
+  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
+    if (messagesContainerRef.current) {
+      try {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior,
+        });
+        return;
+      } catch (e) {
+        // fall back to scrollIntoView if scrollTo with options isn't supported
+      }
+    }
+
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    // Skip initial auto-scroll on mount to avoid mobile viewport jumping/hiding the navbar
+    if (initialRenderRef.current) {
+      initialRenderRef.current = false;
+      return;
+    }
+
+    // Scroll on subsequent message/isLoading changes
+    scrollToBottom("auto");
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -255,7 +277,6 @@ export const Chat = () => {
 
   return (
     <div className="h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] bg-gradient-to-br from-sky-100 via-white to-purple-100 dark:from-[#0a0a0a] dark:via-[#111111] dark:to-[#1a1a1a] p-3 sm:p-4 md:p-6">
-      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.02] pointer-events-none"></div>
       {currentChatingFile && (
         <div className="flex flex-col max-w-2xl mx-auto justify-center items-center p-2 sm:p-3 md:p-4 bg-gradient-to-r from-white/80 to-white/60 dark:from-gray-800/20 dark:to-gray-800/10 border border-white/20 dark:border-white/5 rounded-xl sm:rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] animate-float">
           <span className="bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 dark:from-purple-400 dark:via-pink-400 dark:to-blue-400 bg-clip-text text-transparent font-bold text-sm sm:text-base md:text-lg animate-shimmer">
