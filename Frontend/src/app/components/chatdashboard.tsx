@@ -36,36 +36,38 @@ export const Chat = () => {
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const initialRenderRef = useRef(true);
-
-  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
-    if (messagesContainerRef.current) {
-      try {
-        messagesContainerRef.current.scrollTo({
-          top: messagesContainerRef.current.scrollHeight,
-          behavior,
-        });
-        return;
-      } catch (e) {
-        // fall back to scrollIntoView if scrollTo with options isn't supported
-      }
-    }
-
-    messagesEndRef.current?.scrollIntoView({ behavior });
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+  useEffect(() => {
+    setMounted(true);
+    
+    // Fix: Prevent scroll on mount
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }, 100);
+    
+    // Also lock scroll during initial load
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => {
+      document.body.style.overflow = 'auto';
+    }, 500);
+    
+    return () => {
+      // Clean up any ongoing requests when component unmounts
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
 
   useEffect(() => {
-    // Skip initial auto-scroll on mount to avoid mobile viewport jumping/hiding the navbar
-    if (initialRenderRef.current) {
-      initialRenderRef.current = false;
-      return;
-    }
-
-    // Scroll on subsequent message/isLoading changes
-    scrollToBottom("auto");
+    scrollToBottom();
   }, [messages, isLoading]);
 
   useEffect(() => {
