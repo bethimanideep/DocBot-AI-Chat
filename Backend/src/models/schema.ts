@@ -8,6 +8,9 @@ const userSchema = new mongoose.Schema(
     password: { type: String, select: false }, // Only for email/password authentication
     otp: { type: String, select: false }, // For OTP-based verification
     otpExpiresAt: { type: Date, select: false }, // OTP expiration time
+  // Password reset token (single-use) and expiration
+  resetToken: { type: String, select: false },
+  resetExpires: { type: Date, select: false },
     verified: { type: Boolean, default: false }, // Whether the user is verified
   },
   {

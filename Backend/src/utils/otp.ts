@@ -37,3 +37,28 @@ export const sendOTP = async (user: any, email: string) => {
     console.error("Error sending OTP email:", error);
   }
 };
+
+// Send password reset email with single-use token
+export const sendPasswordReset = async (user: any, email: string, token: string) => {
+  try {
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
+
+    // Set token and expiry on user (1 hour)
+    user.resetToken = token;
+    user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+    await user.save();
+
+    const mailOptions = {
+      from: process.env.EMAIL,
+      to: email,
+      subject: "Password Reset Request",
+      text: `You requested a password reset. Click the link to reset your password (valid for 1 hour): ${resetLink}`,
+      html: `<p>You requested a password reset. Click the link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Password reset email sent to ${email}`);
+  } catch (error) {
+    console.error("Error sending password reset email:", error);
+  }
+};

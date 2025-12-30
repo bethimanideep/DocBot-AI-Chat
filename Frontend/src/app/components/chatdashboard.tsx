@@ -38,11 +38,6 @@ export const Chat = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-  
-
   useEffect(() => {
   }, [messages, isLoading]);
 

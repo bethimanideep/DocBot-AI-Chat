@@ -6,6 +6,8 @@ import jwt from "jsonwebtoken";
 import { GoogleDriveFile, User, UserFile } from "../models/schema"; // Import the updated User model
 import { hashPassword, verifyPassword } from "../utils/hash";
 import { sendOTP } from "../utils/otp";
+import { sendPasswordReset } from "../utils/otp";
+import crypto from "crypto";
 import { google } from "googleapis";
 
 const router = Router();
@@ -315,6 +317,57 @@ router.post("/drivelogout", (req:any, res:any) => {
     res.status(500).json({ error: error});
   }
 
+});
+
+// Forgot password - generate token and send reset link (if user exists)
+router.post("/forgot-password", async (req:any, res:any) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email is required" });
+
+  try {
+  const user = await User.findOne({ email, authenticationType: "email" });
+
+    // Always respond with success message to avoid revealing account existence
+    if (!user) {
+      return res.status(200).json({ message: "If an account with that email exists, a reset link has been sent." });
+    }
+
+    // Generate secure token
+    const token = crypto.randomBytes(32).toString("hex");
+    await sendPasswordReset(user, email, token);
+
+    return res.status(200).json({ message: "If an account with that email exists, a reset link has been sent." });
+  } catch (error) {
+    console.error("Error in /forgot-password:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Reset password - accept token and new password
+router.post("/reset-password", async (req:any, res:any) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: "Token and new password are required" });
+
+  try {
+    const user = await User.findOne({ resetToken: token, resetExpires: { $gt: new Date() } }).select('+password');
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired token" });
+    }
+
+    // Hash and update password
+    const hashed = await hashPassword(password);
+    user.password = hashed as any;
+    // Clear reset token fields so the link cannot be reused
+    user.resetToken = undefined;
+    user.resetExpires = undefined;
+    user.verified = true; // mark verified if resetting
+    await user.save();
+
+    return res.status(200).json({ message: "Password has been reset successfully" });
+  } catch (error) {
+    console.error("Error in /reset-password:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 export default router;
