@@ -37,6 +37,11 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const dispatch = useDispatch();
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
+  
+  // Touch handling state
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchMovedRef = useRef(false);
+
   const uploadedFiles = useSelector(
     (state: RootState) => state.socket.uploadedFiles
   );
@@ -48,7 +53,8 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const isDragging = useRef(false);
   const startX = useRef(0);
   const currentX = useRef(0);
-  const sidebarWidth = useRef(350); 
+  const sidebarWidth = useRef(350);
+
   const handleSyncFile = async (fileId: string, e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
   
@@ -83,7 +89,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       setLoadingFiles((prev) => ({ ...prev, [fileId]: false }));
     }
   };
-  
 
   const fetchDriveFiles = async () => {
     if(!userId){
@@ -149,8 +154,48 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       showToast("info", "Disconnected", "Google Drive connection cleared");
     }
   };
-  
-  // Mouse event handlers
+
+  // Touch handling for file selection
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now()
+    };
+    touchMovedRef.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y);
+    
+    // If the touch moved more than 10px, consider it a scroll/pan gesture
+    if (deltaX > 10 || deltaY > 10) {
+      touchMovedRef.current = true;
+    }
+  };
+
+  const handleTouchEnd = (callback: () => void, e: React.TouchEvent) => {
+    if (!touchStartRef.current || touchMovedRef.current) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    // Check if it was a quick tap (less than 500ms)
+    const touchDuration = Date.now() - touchStartRef.current.time;
+    if (touchDuration < 500) {
+      e.preventDefault();
+      callback();
+    }
+    
+    touchStartRef.current = null;
+    touchMovedRef.current = false;
+  };
+
+  // Mouse event handlers for resizing
   const startDraggingMouse = (event: React.MouseEvent) => {
     isDragging.current = true;
     startX.current = event.clientX;
@@ -174,7 +219,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
     document.removeEventListener("mouseup", stopDraggingMouse);
   };
 
-  // Touch event handlers for mobile
+  // Touch event handlers for mobile resizing
   const startDraggingTouch = (event: React.TouchEvent) => {
     isDragging.current = true;
     startX.current = event.touches[0].clientX;
@@ -247,18 +292,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
     }
   };
 
-  const handleDriveFileTouch = (file: any, e: React.TouchEvent) => {
-    e.stopPropagation();
-    if(file.synced) {
-      dispatch(setCurrentChatingFile(file.name));
-      dispatch(setFileId(file._id));
-      setSelectedFileId(file.id);
-      onFileClick?.();
-    } else {
-      showToast("error", "Sync File", "File is not in Sync");
-    }
-  };
-
   return (
     <div
       ref={sidebarRef}
@@ -292,7 +325,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                   dispatch(setCurrentChatingFile("Local Files"));
                   onFileClick?.();
                 }}
-                onTouchStart={(e) => e.stopPropagation()}
               >
                 Chat All
               </button>
@@ -312,10 +344,9 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       "bg-blue-50 dark:bg-blue-900/50"
                   )}
                   onClick={() => handleLocalFileClick(file)}
-                  onTouchStart={(e) => {
-                    e.stopPropagation();
-                    handleLocalFileClick(file);
-                  }}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={(e) => handleTouchEnd(() => handleLocalFileClick(file), e)}
                 >
                   <div className="flex items-center flex-1 min-w-0">
                     <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
@@ -364,7 +395,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       dispatch(setCurrentChatingFile("Gdrive"));
                       onFileClick?.();
                     }}
-                    onTouchStart={(e) => e.stopPropagation()}
                   >
                     Chat All
                   </button>
@@ -374,7 +404,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       e.stopPropagation();
                       handleGoogleDriveLogout();
                     }}
-                    onTouchStart={(e) => e.stopPropagation()}
                     disabled={driveLoading}
                     title="Disconnect Google Drive"
                   >
@@ -399,7 +428,9 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       "bg-green-50 dark:bg-green-900/50"
                   )}
                   onClick={() => handleDriveFileClick(file)}
-                  onTouchStart={(e) => handleDriveFileTouch(file, e)}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={(e) => handleTouchEnd(() => handleDriveFileClick(file), e)}
                 >
                   <div className="flex items-center flex-1 min-w-0">
                     <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
@@ -421,10 +452,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       <Repeat
                         className="w-4 h-4 text-blue-500 hover:text-blue-700 cursor-pointer active:scale-110"
                         onClick={(e) => handleSyncFile(file.id, e)}
-                        onTouchStart={(e) => {
-                          e.stopPropagation();
-                          handleSyncFile(file.id, e);
-                        }}
                       />
                     )}
                     <a
@@ -433,7 +460,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       rel="noopener noreferrer"
                       className="text-xs text-blue-500 hover:underline"
                       onClick={(e) => e.stopPropagation()}
-                      onTouchStart={(e) => e.stopPropagation()}
                     >
                       View
                     </a>
@@ -452,7 +478,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                   e.stopPropagation();
                   fetchDriveFiles();
                 }}
-                onTouchStart={(e) => e.stopPropagation()}
                 disabled={driveLoading}
               >
                 {driveLoading ? (
