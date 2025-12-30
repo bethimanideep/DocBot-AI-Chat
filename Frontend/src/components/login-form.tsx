@@ -59,8 +59,11 @@ export function LoginForm({
     } catch (error) {
       console.error("Login Error:", error);
       alert("An error occurred. Please try again.");
+    } finally {
+      // Always reset submitting state so buttons are re-enabled on error/completion
+      setIsSubmitting(false);
     }
-
+    
   };
 
   return (
