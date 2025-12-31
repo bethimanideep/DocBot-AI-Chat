@@ -4,7 +4,6 @@ import { error } from "console";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
-const SERVER_URL = "https://docbot-ai-chat.onrender.com/";
 
 export default function ServerStatus() {
   useEffect(() => {
@@ -15,7 +14,7 @@ export default function ServerStatus() {
 
     const checkServer = async () => {
       try {
-        const res = await fetch(SERVER_URL, { method: "GET", cache: "no-store" });
+        const res = await fetch(process.env.NEXT_PUBLIC_BACKEND_URL!, { method: "GET", cache: "no-store" });
         if (!res.ok) return;
 
         const text = await res.text();

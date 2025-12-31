@@ -85,6 +85,19 @@ export const Chat = () => {
     }
   }, [currentChatingFile]);
 
+  // Scroll to bottom whenever messages change
+useEffect(() => {
+  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+}, [messages, isLoading]);
+
+// Also scroll when streaming
+useEffect(() => {
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage?.sender === 'other' && lastMessage?.isStreaming) {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }
+}, [messages]);
+
   const handleStreamingResponse = async (query: string) => {
     if (currentChatingFile == null) {
       showToast("warning", "", "Select Any File To Chat");
