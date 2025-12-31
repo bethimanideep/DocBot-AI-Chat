@@ -37,7 +37,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const dispatch = useDispatch();
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
-  
+
   // Touch handling state
   const touchStartRef = useRef<{ x: number; y: number; time: number; target: EventTarget | null } | null>(null);
   const touchMovedRef = useRef(false);
@@ -59,14 +59,14 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const handleSyncFile = async (fileId: string, e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     e.preventDefault(); // Prevent default on mobile
-    
+
     // Don't sync if already synced
     const file = driveFiles.find((f: any) => f.id === fileId);
     if (file && (file as any).synced) return;
-  
+
     // Set loading state for this file
     setLoadingFiles((prev) => ({ ...prev, [fileId]: true }));
-  
+
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/gdrive/sync?fileId=${fileId}&userId=${userId}`,
@@ -74,15 +74,15 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
           credentials: "include",
         }
       );
-  
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to sync file");
       }
-  
+
       const data = await response.json();
       showToast("success", "File Synced", "File Sync Successful");
-  
+
     } catch (error: any) {
       showToast("error", "Sync Failed", error.message);
       console.error("Error syncing file:", error);
@@ -93,7 +93,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   };
 
   const fetchDriveFiles = async () => {
-    if(!userId){
+    if (!userId) {
       showToast("error", "Login Required", "");
       return;
     }
@@ -172,11 +172,11 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
-    
+
     const touch = e.touches[0];
     const deltaX = Math.abs(touch.clientX - touchStartRef.current.x);
     const deltaY = Math.abs(touch.clientY - touchStartRef.current.y);
-    
+
     // If the touch moved more than 10px, consider it a scroll/pan gesture
     if (deltaX > 10 || deltaY > 10) {
       touchMovedRef.current = true;
@@ -187,11 +187,11 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
     if (!touchStartRef.current) return;
 
     const touchDuration = Date.now() - touchStartRef.current.time;
-    
+
     // Check if the touch target was a button/link
     const targetElement = touchTargetRef.current as HTMLElement;
     const isButtonOrLink = targetElement?.closest('button, a, .sync-button, .view-link');
-    
+
     // If it's a button/link and wasn't moved, don't trigger file click
     if (isButtonOrLink && !touchMovedRef.current) {
       touchStartRef.current = null;
@@ -205,7 +205,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       e.preventDefault();
       callback();
     }
-    
+
     touchStartRef.current = null;
     touchTargetRef.current = null;
     touchMovedRef.current = false;
@@ -305,7 +305,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   };
 
   const handleDriveFileClick = (file: any) => {
-    if(file.synced) {
+    if (file.synced) {
       dispatch(setCurrentChatingFile(file.name));
       dispatch(setFileId(file._id));
       setSelectedFileId(file.id);
@@ -360,7 +360,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
               </button>
             )}
           </div>
-          
+
           {uploadedFiles.length > 0 ? (
             <div className="space-y-1">
               {uploadedFiles.map((file: any, i: number) => (
@@ -371,7 +371,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                     "hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600",
                     "transition-all duration-200",
                     selectedFileId === file._id &&
-                      "bg-blue-50 dark:bg-blue-900/50"
+                    "bg-blue-50 dark:bg-blue-900/50"
                   )}
                   onClick={() => handleLocalFileClick(file)}
                   onTouchStart={handleTouchStart}
@@ -457,7 +457,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
               )}
             </div>
           </div>
-          
+
           {driveFiles.length > 0 ? (
             <div className="space-y-1">
               {driveFiles.map((file: any, i: number) => (
@@ -468,7 +468,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                     "hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600",
                     "transition-all duration-200",
                     selectedFileId === file.id &&
-                      "bg-green-50 dark:bg-green-900/50"
+                    "bg-green-50 dark:bg-green-900/50"
                   )}
                   onClick={() => handleDriveFileClick(file)}
                   onTouchStart={handleTouchStart}
@@ -495,8 +495,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       <button
                         className="sync-button p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded active:scale-110 transition-all"
                         onClick={(e) => handleSyncFile(file.id, e)}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        onTouchEnd={(e) => handleMobileButtonClick(e, () => handleSyncFile(file.id, e))}
                         title="Sync file"
                       >
                         <Repeat className="w-4 h-4 text-blue-500" />
@@ -564,7 +562,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
         className="absolute right-0 top-0 bottom-0 w-4 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors duration-200 touch-manipulation"
         onMouseDown={startDraggingMouse}
         onTouchStart={startDraggingTouch}
-        style={{ 
+        style={{
           touchAction: 'none', // Prevent default touch actions like scrolling
           userSelect: 'none' // Prevent text selection while dragging
         }}
