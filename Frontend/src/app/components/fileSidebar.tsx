@@ -39,8 +39,9 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
   
   // Touch handling state
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number; target: EventTarget | null } | null>(null);
   const touchMovedRef = useRef(false);
+  const touchTargetRef = useRef<EventTarget | null>(null);
 
   const uploadedFiles = useSelector(
     (state: RootState) => state.socket.uploadedFiles
@@ -57,7 +58,8 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
 
   const handleSyncFile = async (fileId: string, e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-  
+    e.preventDefault(); // Prevent default on mobile
+    
     // Don't sync if already synced
     const file = driveFiles.find((f: any) => f.id === fileId);
     if (file && (file as any).synced) return;
@@ -155,13 +157,16 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
     }
   };
 
-  // Touch handling for file selection
+  // Improved touch handling for file selection
   const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
     touchStartRef.current = {
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY,
-      time: Date.now()
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now(),
+      target: e.target
     };
+    touchTargetRef.current = e.target;
     touchMovedRef.current = false;
   };
 
@@ -179,20 +184,38 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   };
 
   const handleTouchEnd = (callback: () => void, e: React.TouchEvent) => {
-    if (!touchStartRef.current || touchMovedRef.current) {
+    if (!touchStartRef.current) return;
+
+    const touchDuration = Date.now() - touchStartRef.current.time;
+    
+    // Check if the touch target was a button/link
+    const targetElement = touchTargetRef.current as HTMLElement;
+    const isButtonOrLink = targetElement?.closest('button, a, .sync-button, .view-link');
+    
+    // If it's a button/link and wasn't moved, don't trigger file click
+    if (isButtonOrLink && !touchMovedRef.current) {
       touchStartRef.current = null;
+      touchTargetRef.current = null;
+      touchMovedRef.current = false;
       return;
     }
 
-    // Check if it was a quick tap (less than 500ms)
-    const touchDuration = Date.now() - touchStartRef.current.time;
-    if (touchDuration < 500) {
+    // Only trigger callback for quick tap (less than 500ms) and not moved
+    if (!touchMovedRef.current && touchDuration < 500) {
       e.preventDefault();
       callback();
     }
     
     touchStartRef.current = null;
+    touchTargetRef.current = null;
     touchMovedRef.current = false;
+  };
+
+  // Handle button clicks on mobile
+  const handleMobileButtonClick = (e: React.MouseEvent | React.TouchEvent, callback: () => void) => {
+    e.stopPropagation();
+    e.preventDefault();
+    callback();
   };
 
   // Mouse event handlers for resizing
@@ -325,6 +348,13 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                   dispatch(setCurrentChatingFile("Local Files"));
                   onFileClick?.();
                 }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  dispatch(setCurrentChatingFile("Local Files"));
+                  onFileClick?.();
+                }}
               >
                 Chat All
               </button>
@@ -395,6 +425,13 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                       dispatch(setCurrentChatingFile("Gdrive"));
                       onFileClick?.();
                     }}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      dispatch(setCurrentChatingFile("Gdrive"));
+                      onFileClick?.();
+                    }}
                   >
                     Chat All
                   </button>
@@ -402,6 +439,12 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                     className="px-3 py-1 text-xs font-medium text-white bg-red-500 rounded-full hover:bg-red-600 transition-colors duration-200 flex items-center gap-1 active:scale-95"
                     onClick={(e) => {
                       e.stopPropagation();
+                      handleGoogleDriveLogout();
+                    }}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
                       handleGoogleDriveLogout();
                     }}
                     disabled={driveLoading}
@@ -449,17 +492,30 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                     ) : loadingFiles[file.id] ? (
                       <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                     ) : (
-                      <Repeat
-                        className="w-4 h-4 text-blue-500 hover:text-blue-700 cursor-pointer active:scale-110"
+                      <button
+                        className="sync-button p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded active:scale-110 transition-all"
                         onClick={(e) => handleSyncFile(file.id, e)}
-                      />
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => handleMobileButtonClick(e, () => handleSyncFile(file.id, e))}
+                        title="Sync file"
+                      >
+                        <Repeat className="w-4 h-4 text-blue-500" />
+                      </button>
                     )}
                     <a
                       href={file.webViewLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-500 hover:underline"
+                      className="view-link text-xs text-blue-500 hover:underline px-1"
                       onClick={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation();
+                        // Prevent default if it's a button-like action
+                        if (e.target instanceof HTMLAnchorElement) {
+                          return; // Let the anchor tag handle navigation
+                        }
+                      }}
                     >
                       View
                     </a>
@@ -476,6 +532,12 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
                 className="mt-2 px-4 py-2 text-xs text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors duration-200 flex items-center gap-2 mx-auto active:scale-95"
                 onClick={(e) => {
                   e.stopPropagation();
+                  fetchDriveFiles();
+                }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
                   fetchDriveFiles();
                 }}
                 disabled={driveLoading}

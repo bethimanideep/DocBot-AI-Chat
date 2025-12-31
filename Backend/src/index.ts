@@ -602,12 +602,52 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
     // Choose processor according to mime type
     const mimeType = fileMetadata.mimeType || "";
     let chunks: string[];
+
     if (mimeType === "application/pdf") {
       // Process PDF and generate embeddings
       chunks = await processPdf(fileBuffer);
     } else if (mimeType.startsWith("image/")) {
       // Process image using OCR
       chunks = await processImage(fileBuffer);
+    } else if (
+      // Word mime types (uploaded .docx/.doc)
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      mimeType === "application/msword" ||
+      // Some drives may not set mimeType consistently; fall back to filename extension
+      (fileMetadata.name && fileMetadata.name.toLowerCase().endsWith('.docx')) ||
+      (fileMetadata.name && fileMetadata.name.toLowerCase().endsWith('.doc'))
+    ) {
+      // Process Word document (DOCX/DOC) using mammoth
+      chunks = await processDocx(fileBuffer);
+    } else if (mimeType === 'application/vnd.google-apps.document') {
+      // Google Docs: export to a supported format (try DOCX first, fallback to plain text)
+      try {
+        const exportRes = await drive.files.export({ fileId, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, { responseType: 'arraybuffer' });
+        const exportBuf = Buffer.from(exportRes.data as ArrayBuffer);
+        chunks = await processDocx(exportBuf);
+      } catch (exportErr) {
+        console.warn('DOCS export to DOCX failed, falling back to plain text export:', exportErr);
+        try {
+          const exportTxtRes = await drive.files.export({ fileId, mimeType: 'text/plain' }, { responseType: 'arraybuffer' });
+          const textBuf = Buffer.from(exportTxtRes.data as ArrayBuffer);
+          const text = textBuf.toString('utf8');
+
+          if (!text || text.trim().length < 20) {
+            throw new Error('Exported text from Google Doc is empty or too short');
+          }
+
+          const splitter = new TokenTextSplitter({
+            encodingName: 'gpt2',
+            chunkSize: 7500,
+            chunkOverlap: 0,
+          });
+          const docs = await splitter.createDocuments([text]);
+          chunks = docs.map((d) => d.pageContent);
+        } catch (txtErr) {
+          console.error('Failed to export Google Doc as text:', txtErr);
+          return res.status(400).json({ message: `Unsupported or empty Google Doc export for fileId: ${fileId}` });
+        }
+      }
     } else {
       return res.status(400).json({ message: `Unsupported mime type: ${mimeType}` });
     }
