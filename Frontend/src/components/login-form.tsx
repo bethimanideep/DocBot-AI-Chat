@@ -9,7 +9,7 @@ import { showToast } from "@/lib/toast";
 import { Otp } from "@/app/components/otp";
 // Callback to open forgot password modal is passed from parent
 import { useDispatch } from "react-redux"; // Import useSelector
-import { setUploadedFiles, setUserId, setUsername } from "@/app/components/reduxtoolkit/socketSlice";
+import { setUploadedFiles, setUserId, setUsername, setCurrentChatingFile } from "@/app/components/reduxtoolkit/socketSlice";
 // Adjust the import path
 interface LoginFormProps {
   className?: string;
@@ -51,6 +51,10 @@ export function LoginForm({
           dispatch(setUsername(data.username));
           dispatch(setUserId(data.userId));
           dispatch(setUploadedFiles(data.fileList));
+          // If user has uploaded files on server, switch heading to Local Files
+          if (data.fileList && data.fileList.length > 0) {
+            dispatch(setCurrentChatingFile("Local Files"));
+          }
           onClose();
         }
       } else {
