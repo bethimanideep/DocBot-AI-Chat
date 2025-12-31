@@ -1,48 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { error } from "console";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
-export default function ServerStatus() {
-  const [serverUp, setServerUp] = useState(false);
+const SERVER_URL = "https://docbot-ai-chat.onrender.com/";
 
+export default function ServerStatus() {
   useEffect(() => {
-    let toastId: string | number | undefined;
+    const toastId = toast.warning(
+      "Render server is spinning up, Please wait..",
+      { duration: Infinity }
+    );
 
     const checkServer = async () => {
-      // Show persistent toast immediately
-      toastId = toast("Render server is spinning up...", {
-        description: "Please wait, first request may take 30–60s",
-        duration: Infinity
-      });
-
       try {
-        const res = await fetch("https://docbot-ai-chat.onrender.com/", {
-          method: "GET",
-          cache: "no-store"
-        });
-
-        if (!res.ok) throw new Error(`Status: ${res.status}`);
+        const res = await fetch(SERVER_URL, { method: "GET", cache: "no-store" });
+        if (!res.ok) return;
 
         const text = await res.text();
+        if (!text.toLowerCase().includes("hi")) return;
 
-        if (!text.toLowerCase().includes("hi")) {
-          throw new Error("Unexpected response from server");
-        }
-
-        setServerUp(true);
-
-        toast.dismiss(toastId);
-        toast.success("Render Server is ready!");
-      } catch (err: any) {
-        toast.dismiss(toastId);
-        toast.error("Render server failed to start", {
-          description: err?.message || "Something went wrong"
-        });
+        toast.dismiss(toastId); // dismiss only if server responds correctly
+        toast.success(
+          "Render server is ready!",
+        );
+      } catch (error) {
+        // ignore errors
+        toast.error("Error connecting to server.");
+        console.log(error);
+        
       }
     };
 
-    checkServer();
+    checkServer(); // only one request
   }, []);
 
   return null;

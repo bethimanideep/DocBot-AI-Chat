@@ -27,15 +27,13 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {/* Add Server Status Component */}
-            <ServerStatus />
-            {/* Or use ServerStatusBar for persistent notification bar */}
-            {/* <ServerStatusBar /> */}
-            
+            <Toaster />        {/* MUST be first */}
+            <ServerStatus />   {/* Toast fires after Toaster exists */}
+
             {children}
             <CornerStats />
-            <Toaster />
           </ThemeProvider>
+
         </Providers>
       </body>
     </html>
