@@ -134,5 +134,5 @@ For any inquiries or support, please contact [your-email@example.com](mailto:you
 ---
 
 <div align="center">
-  Made with ❤️ by Your Name
+  Made with ❤️
 </div>
