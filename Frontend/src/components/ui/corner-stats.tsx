@@ -280,22 +280,21 @@ export default function CornerStats() {
               </span>
             </div>
             
-            {/* Small label text - optional, can be removed for even smaller size */}
-            {!isMobile && (
-              <span className="text-[8px] text-gray-600 dark:text-gray-400 font-medium mt-0.5 leading-tight truncate max-w-[36px]">
-                Active
-              </span>
-            )}
+            {/* Small label text (always inside the bubble) */}
+            <span className="text-[8px] text-gray-600 dark:text-gray-400 font-medium mt-0.5 leading-tight truncate max-w-[36px]">
+              Active
+            </span>
           </div>
           
           {/* Desktop Tooltip */}
           {!isMobile && (
             <div className="absolute right-12 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-lg">
-              <div className="font-semibold text-[11px]">Active Users</div>
-              <div className="text-gray-300 text-[10px]">{getFullNumber(activeUsers)} online</div>
+              <div className="font-semibold text-[11px]">Active</div>
               <div className="text-[10px] text-gray-400 mt-0.5">Drag to reposition</div>
             </div>
           )}
+
+          
         </div>
 
         {/* Total Visits */}
@@ -317,22 +316,21 @@ export default function CornerStats() {
               </span>
             </div>
             
-            {/* Small label text - optional, can be removed for even smaller size */}
-            {!isMobile && (
-              <span className="text-[8px] text-gray-600 dark:text-gray-400 font-medium mt-0.5 leading-tight truncate max-w-[36px]">
-                Visits
-              </span>
-            )}
+            {/* Small label text (always inside the bubble) */}
+            <span className="text-[8px] text-gray-600 dark:text-gray-400 font-medium mt-0.5 leading-tight truncate max-w-[36px]">
+              Visits
+            </span>
           </div>
           
           {/* Desktop Tooltip */}
           {!isMobile && (
             <div className="absolute right-12 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-lg">
-              <div className="font-semibold text-[11px]">Total Visits</div>
-              <div className="text-gray-300 text-[10px]">{getFullNumber(totalVisits)} visits</div>
+              <div className="font-semibold text-[11px]">Visits</div>
               <div className="text-[10px] text-gray-400 mt-0.5">Drag to reposition</div>
             </div>
           )}
+
+          
         </div>
       </div>
       
@@ -342,13 +340,6 @@ export default function CornerStats() {
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
       />
-      
-      {/* Mobile tooltip - shows on tap */}
-      {isMobile && (
-        <div className="absolute right-12 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-50 shadow-lg">
-          <div className="text-[10px] text-gray-300">Tap & drag to move</div>
-        </div>
-      )}
     </div>
   );
 }
