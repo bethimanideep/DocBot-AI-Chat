@@ -1,16 +1,12 @@
 "use client";
 
-import { error } from "console";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
 
 export default function ServerStatus() {
   useEffect(() => {
-    const toastId = toast.warning(
-      "Render server is spinning up, Please wait..",
-      { duration: Infinity }
-    );
+    let toastId: string | number | null = null;
 
     const checkServer = async () => {
       try {
@@ -20,7 +16,9 @@ export default function ServerStatus() {
         const text = await res.text();
         if (!text.toLowerCase().includes("hi")) return;
 
-        toast.dismiss(toastId); // dismiss only if server responds correctly
+        if (toastId !== null) {
+          toast.dismiss(toastId); // dismiss only if server responds correctly
+        }
         toast.success(
           "Render server is ready!",
         );
@@ -28,11 +26,28 @@ export default function ServerStatus() {
         // ignore errors
         toast.error("Error connecting to server.");
         console.log(error);
-        
       }
     };
 
-    checkServer(); // only one request
+    // Show initial loading toast
+    toastId = toast.warning(
+      "Render server is spinning up, Please wait..",
+      { duration: Infinity }
+    );
+
+    // Check server immediately
+    checkServer();
+
+    // Set interval to check every 14 minutes (840000 milliseconds)
+    const interval = setInterval(checkServer, 840000);
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(interval);
+      if (toastId !== null) {
+        toast.dismiss(toastId);
+      }
+    };
   }, []);
 
   return null;
