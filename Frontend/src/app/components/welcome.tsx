@@ -1,6 +1,6 @@
 import React, { ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { FileText, Heart, Laugh, Loader2, MessageSquare, Smile, SmilePlus, Sparkles } from 'lucide-react';
+import { FileText, Zap, Laugh, Loader2, MessageSquare, Smile, SmilePlus, Sparkles } from 'lucide-react';
 import { RootState } from './reduxtoolkit/store';
 import { useDispatch, useSelector } from 'react-redux';
 import { setSocketId, setUploadedFiles, setProgress, setIsLoading } from "./reduxtoolkit/socketSlice";
@@ -95,7 +95,7 @@ export const Welcome = () => {
           </div>
         </div>
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4 sm:mb-6 flex items-center gap-2">
-          <Heart className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-red-500 animate-bounce fill-red-500 hover:animate-pulse" />Welcome to DocBot<Heart className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-red-500 animate-bounce fill-red-500 hover:animate-pulse" />
+          <Zap className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-blue-600 animate-bounce hover:animate-pulse" />Welcome to DocBot<Zap className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-purple-600 animate-bounce hover:animate-pulse" />
         </h1>
 
         <p className="text-base sm:text-lg md:text-xl text-gray-700 mb-6 sm:mb-8 leading-relaxed">
