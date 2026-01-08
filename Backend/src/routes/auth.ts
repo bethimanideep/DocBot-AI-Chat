@@ -6,29 +6,14 @@ import jwt from "jsonwebtoken";
 import { GoogleDriveFile, User, UserFile } from "../models/schema"; // Import the updated User model
 import { hashPassword, verifyPassword } from "../utils/hash";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { google } from "googleapis";
 
 const router = Router();
 
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  requireTLS: true,
-  pool: true,                    // Enable connection pooling for reuse
-  maxConnections: 5,             // Reuse up to 5 connections
-  maxMessages: 100,              // Send max 100 messages per connection
-  rateDelta: 1000,               // Rate limiting: milliseconds between messages
-  rateLimit: 10,                 // Max 10 messages per rateDelta
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.PASSWORD,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-});
+// Initialize Resend with API key
+const resend = new Resend(process.env.RESEND_API_KEY);
+const senderEmail = process.env.SENDER_EMAIL || "noreply@resend.dev";
 
 // Google Sign-In (Basic Profile and Email)
 router.get(
@@ -214,14 +199,12 @@ router.post("/login", async (req:any, res:any) => {
           user.otpExpiresAt = otpExpiresAt;
           await user.save();
 
-          const mailOptions = {
-            from: process.env.EMAIL,
+          await resend.emails.send({
+            from: senderEmail,
             to: email,
             subject: "Your OTP Code",
-            text: `Your OTP code is: ${otp}`,
-          };
-
-          await transporter.sendMail(mailOptions);
+            html: `<p>Your OTP code is: <strong>${otp}</strong></p><p>This code will expire in 10 minutes.</p>`,
+          });
           console.log(`OTP sent to ${email}`);
         } catch (error) {
           console.error("Error sending OTP email:", error);
@@ -248,14 +231,12 @@ router.post("/login", async (req:any, res:any) => {
           user.otpExpiresAt = otpExpiresAt;
           await user.save();
 
-          const mailOptions = {
-            from: process.env.EMAIL,
+          await resend.emails.send({
+            from: senderEmail,
             to: email,
             subject: "Your OTP Code",
-            text: `Your OTP code is: ${otp}`,
-          };
-
-          await transporter.sendMail(mailOptions);
+            html: `<p>Your OTP code is: <strong>${otp}</strong></p><p>This code will expire in 10 minutes.</p>`,
+          });
           console.log(`OTP sent to ${email}`);
         } catch (error) {
           console.error("Error sending OTP email:", error);
@@ -399,15 +380,12 @@ router.post("/forgot-password", async (req:any, res:any) => {
         user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
         await user.save();
 
-        const mailOptions = {
-          from: process.env.EMAIL,
+        await resend.emails.send({
+          from: senderEmail,
           to: email,
           subject: "Password Reset Request",
-          text: `You requested a password reset. Click the link to reset your password (valid for 1 hour): ${resetLink}`,
-          html: `<p>You requested a password reset. Click the link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p>`,
-        };
-
-        await transporter.sendMail(mailOptions);
+          html: `<p>You requested a password reset. Click the link below to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+        });
         console.log(`Password reset email sent to ${email}`);
       } catch (error) {
         console.error("Error sending password reset email:", error);
