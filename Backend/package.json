@@ -47,6 +47,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pdf-parse": "^2.4.5",
     "redis": "^4.7.0",
+    "resend": "^6.7.0",
     "socket.io": "^4.8.1",
     "tesseract.js": "^7.0.0",
     "weaviate-ts-client": "^2.2.0"
