@@ -5,12 +5,22 @@ import passport from "../config/passport";
 import jwt from "jsonwebtoken";
 import { GoogleDriveFile, User, UserFile } from "../models/schema"; // Import the updated User model
 import { hashPassword, verifyPassword } from "../utils/hash";
-import { sendOTP } from "../utils/otp";
-import { sendPasswordReset } from "../utils/otp";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { google } from "googleapis";
 
 const router = Router();
+
+
+const createTransporter =()=> nodemailer.createTransport({
+    host: "smtp.gmail.com",      // e.g. smtp.gmail.com
+    port: 587,                   // 587 for TLS, 465 for SSL
+    secure: false,               // true for 465, false for 587
+    auth: {
+      user: process.env.EMAIL,
+      pass: process.env.PASSWORD,
+    }
+  });
 
 // Google Sign-In (Basic Profile and Email)
 router.get(
@@ -186,7 +196,30 @@ router.post("/login", async (req:any, res:any) => {
         verified: false, // Initially unverified
       });
 
-      await sendOTP(user, email);
+      // Send OTP
+      try {
+        const otp = crypto.randomInt(100000, 999999).toString();
+        const otpExpiresAt = new Date(Date.now() + 10 * 60000);
+
+        user.otp = otp;
+        user.otpExpiresAt = otpExpiresAt;
+        await user.save();
+
+        const mailOptions = {
+          from: process.env.EMAIL,
+          to: email,
+          subject: "Your OTP Code",
+          text: `Your OTP code is: ${otp}`,
+        };
+
+        const transporter = createTransporter();
+        await transporter.sendMail(mailOptions);
+        await transporter.close();
+        console.log(`OTP sent to ${email}`);
+      } catch (error) {
+        console.error("Error sending OTP email:", error);
+      }
+
       return res.status(200).json({ message: "OTP sent to your email" });
     }
 
@@ -198,7 +231,29 @@ router.post("/login", async (req:any, res:any) => {
 
     // If user is not verified, send OTP
     if (!user.verified) {
-      await sendOTP(user, email);
+      try {
+        const otp = crypto.randomInt(100000, 999999).toString();
+        const otpExpiresAt = new Date(Date.now() + 10 * 60000);
+
+        user.otp = otp;
+        user.otpExpiresAt = otpExpiresAt;
+        await user.save();
+
+        const mailOptions = {
+          from: process.env.EMAIL,
+          to: email,
+          subject: "Your OTP Code",
+          text: `Your OTP code is: ${otp}`,
+        };
+
+        const transporter = createTransporter();
+        await transporter.sendMail(mailOptions);
+        await transporter.close();
+        console.log(`OTP sent to ${email}`);
+      } catch (error) {
+        console.error("Error sending OTP email:", error);
+      }
+
       return res.status(200).json({ message: "OTP sent to your email" });
     }
 
@@ -326,7 +381,30 @@ router.post("/forgot-password", async (req:any, res:any) => {
 
     // Generate secure token
     const token = crypto.randomBytes(32).toString("hex");
-    await sendPasswordReset(user, email, token);
+    
+    // Send Password Reset Email
+    try {
+      const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
+
+      user.resetToken = token;
+      user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+
+      const mailOptions = {
+        from: process.env.EMAIL,
+        to: email,
+        subject: "Password Reset Request",
+        text: `You requested a password reset. Click the link to reset your password (valid for 1 hour): ${resetLink}`,
+        html: `<p>You requested a password reset. Click the link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+      };
+
+      const transporter = createTransporter();
+      await transporter.sendMail(mailOptions);
+      await transporter.close();
+      console.log(`Password reset email sent to ${email}`);
+    } catch (error) {
+      console.error("Error sending password reset email:", error);
+    }
 
     return res.status(200).json({ message: "If an account with that email exists, a reset link has been sent." });
   } catch (error) {
