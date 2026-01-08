@@ -12,15 +12,23 @@ import { google } from "googleapis";
 const router = Router();
 
 
-const createTransporter =()=> nodemailer.createTransport({
-    host: "smtp.gmail.com",      // e.g. smtp.gmail.com
-    port: 587,                   // 587 for TLS, 465 for SSL
-    secure: false,               // true for 465, false for 587
-    auth: {
-      user: process.env.EMAIL,
-      pass: process.env.PASSWORD,
-    }
-  });
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  requireTLS: true,
+  pool: true,                    // Enable connection pooling for reuse
+  maxConnections: 5,             // Reuse up to 5 connections
+  maxMessages: 100,              // Send max 100 messages per connection
+  rateDelta: 1000,               // Rate limiting: milliseconds between messages
+  rateLimit: 10,                 // Max 10 messages per rateDelta
+  auth: {
+    user: process.env.EMAIL,
+    pass: process.env.PASSWORD,
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+});
 
 // Google Sign-In (Basic Profile and Email)
 router.get(
@@ -196,29 +204,29 @@ router.post("/login", async (req:any, res:any) => {
         verified: false, // Initially unverified
       });
 
-      // Send OTP
-      try {
-        const otp = crypto.randomInt(100000, 999999).toString();
-        const otpExpiresAt = new Date(Date.now() + 10 * 60000);
+      // Send OTP (fire and forget - don't block request)
+      (async () => {
+        try {
+          const otp = crypto.randomInt(100000, 999999).toString();
+          const otpExpiresAt = new Date(Date.now() + 10 * 60000);
 
-        user.otp = otp;
-        user.otpExpiresAt = otpExpiresAt;
-        await user.save();
+          user.otp = otp;
+          user.otpExpiresAt = otpExpiresAt;
+          await user.save();
 
-        const mailOptions = {
-          from: process.env.EMAIL,
-          to: email,
-          subject: "Your OTP Code",
-          text: `Your OTP code is: ${otp}`,
-        };
+          const mailOptions = {
+            from: process.env.EMAIL,
+            to: email,
+            subject: "Your OTP Code",
+            text: `Your OTP code is: ${otp}`,
+          };
 
-        const transporter = createTransporter();
-        await transporter.sendMail(mailOptions);
-        await transporter.close();
-        console.log(`OTP sent to ${email}`);
-      } catch (error) {
-        console.error("Error sending OTP email:", error);
-      }
+          await transporter.sendMail(mailOptions);
+          console.log(`OTP sent to ${email}`);
+        } catch (error) {
+          console.error("Error sending OTP email:", error);
+        }
+      })();
 
       return res.status(200).json({ message: "OTP sent to your email" });
     }
@@ -229,30 +237,30 @@ router.post("/login", async (req:any, res:any) => {
       return res.status(400).json({ error: "Incorrect password" });
     }
 
-    // If user is not verified, send OTP
+    // If user is not verified, send OTP (fire and forget - don't block request)
     if (!user.verified) {
-      try {
-        const otp = crypto.randomInt(100000, 999999).toString();
-        const otpExpiresAt = new Date(Date.now() + 10 * 60000);
+      (async () => {
+        try {
+          const otp = crypto.randomInt(100000, 999999).toString();
+          const otpExpiresAt = new Date(Date.now() + 10 * 60000);
 
-        user.otp = otp;
-        user.otpExpiresAt = otpExpiresAt;
-        await user.save();
+          user.otp = otp;
+          user.otpExpiresAt = otpExpiresAt;
+          await user.save();
 
-        const mailOptions = {
-          from: process.env.EMAIL,
-          to: email,
-          subject: "Your OTP Code",
-          text: `Your OTP code is: ${otp}`,
-        };
+          const mailOptions = {
+            from: process.env.EMAIL,
+            to: email,
+            subject: "Your OTP Code",
+            text: `Your OTP code is: ${otp}`,
+          };
 
-        const transporter = createTransporter();
-        await transporter.sendMail(mailOptions);
-        await transporter.close();
-        console.log(`OTP sent to ${email}`);
-      } catch (error) {
-        console.error("Error sending OTP email:", error);
-      }
+          await transporter.sendMail(mailOptions);
+          console.log(`OTP sent to ${email}`);
+        } catch (error) {
+          console.error("Error sending OTP email:", error);
+        }
+      })();
 
       return res.status(200).json({ message: "OTP sent to your email" });
     }
@@ -382,29 +390,29 @@ router.post("/forgot-password", async (req:any, res:any) => {
     // Generate secure token
     const token = crypto.randomBytes(32).toString("hex");
     
-    // Send Password Reset Email
-    try {
-      const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
+    // Send Password Reset Email (fire and forget - don't block request)
+    (async () => {
+      try {
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
 
-      user.resetToken = token;
-      user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
-      await user.save();
+        user.resetToken = token;
+        user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+        await user.save();
 
-      const mailOptions = {
-        from: process.env.EMAIL,
-        to: email,
-        subject: "Password Reset Request",
-        text: `You requested a password reset. Click the link to reset your password (valid for 1 hour): ${resetLink}`,
-        html: `<p>You requested a password reset. Click the link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p>`,
-      };
+        const mailOptions = {
+          from: process.env.EMAIL,
+          to: email,
+          subject: "Password Reset Request",
+          text: `You requested a password reset. Click the link to reset your password (valid for 1 hour): ${resetLink}`,
+          html: `<p>You requested a password reset. Click the link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+        };
 
-      const transporter = createTransporter();
-      await transporter.sendMail(mailOptions);
-      await transporter.close();
-      console.log(`Password reset email sent to ${email}`);
-    } catch (error) {
-      console.error("Error sending password reset email:", error);
-    }
+        await transporter.sendMail(mailOptions);
+        console.log(`Password reset email sent to ${email}`);
+      } catch (error) {
+        console.error("Error sending password reset email:", error);
+      }
+    })();
 
     return res.status(200).json({ message: "If an account with that email exists, a reset link has been sent." });
   } catch (error) {
