@@ -25,7 +25,7 @@ export default function ForgotPasswordForm({ onClose, onBack }: Props) {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast("success", "", data.message || "If an account exists, a reset link was sent.");
+        showToast("success", "", (data.message || "If an account exists, a reset link was sent.") + " Please check your spam folder if you don't see it.");
         onClose();
       } else {
         showToast("error", "", data.error || "Failed to send reset link");

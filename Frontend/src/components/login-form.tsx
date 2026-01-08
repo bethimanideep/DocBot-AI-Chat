@@ -44,10 +44,11 @@ export function LoginForm({
       const data = await response.json();
 
       if (response.ok) {
-        showToast("success", "", data.message);
         if (data.message === "OTP sent to your email") {
+          showToast("success", "", data.message + " Please check your spam folder if you don't see it.");
           setComponent("otp"); // Set component state to 'otp'
         }else{
+          showToast("success", "", data.message);
           dispatch(setUsername(data.username));
           dispatch(setUserId(data.userId));
           dispatch(setUploadedFiles(data.fileList));

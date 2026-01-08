@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword } from "../utils/hash";
 import crypto from "crypto";
 import { Resend } from "resend";
 import { google } from "googleapis";
+import { emailTemplates } from "../utils/emailTemplates";
 
 const router = Router();
 
@@ -202,8 +203,8 @@ router.post("/login", async (req:any, res:any) => {
           await resend.emails.send({
             from: senderEmail,
             to: email,
-            subject: "Your OTP Code",
-            html: `<p>Your OTP code is: <strong>${otp}</strong></p><p>This code will expire in 10 minutes.</p>`,
+            subject: "Your OTP Code - DocBot AI",
+            html: emailTemplates.otp(otp, "DocBot AI"),
           });
           console.log(`OTP sent to ${email}`);
         } catch (error) {
@@ -234,8 +235,8 @@ router.post("/login", async (req:any, res:any) => {
           await resend.emails.send({
             from: senderEmail,
             to: email,
-            subject: "Your OTP Code",
-            html: `<p>Your OTP code is: <strong>${otp}</strong></p><p>This code will expire in 10 minutes.</p>`,
+            subject: "Your OTP Code - DocBot AI",
+            html: emailTemplates.otp(otp, "DocBot AI"),
           });
           console.log(`OTP sent to ${email}`);
         } catch (error) {
@@ -383,8 +384,8 @@ router.post("/forgot-password", async (req:any, res:any) => {
         await resend.emails.send({
           from: senderEmail,
           to: email,
-          subject: "Password Reset Request",
-          html: `<p>You requested a password reset. Click the link below to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+          subject: "Reset Your Password - DocBot AI",
+          html: emailTemplates.passwordReset(resetLink, "DocBot AI"),
         });
         console.log(`Password reset email sent to ${email}`);
       } catch (error) {

@@ -72,6 +72,9 @@ export function Otp({ email ,onClose}: any) {
       <p className="text-sm text-muted-foreground">
         Please enter the OTP sent to your email.
       </p>
+      <p className="text-xs text-muted-foreground text-center max-w-sm">
+        📧 Can't find the email? Please check your spam/junk folder.
+      </p>
     </div>
   );
 }

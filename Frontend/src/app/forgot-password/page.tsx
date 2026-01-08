@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast("success", "", data.message || "If an account exists, a reset link was sent.");
+        showToast("success", "", (data.message || "If an account exists, a reset link was sent.") + " Please check your spam folder if you don't see it.");
       } else {
         showToast("error", "", data.error || "Failed to send reset link");
       }
