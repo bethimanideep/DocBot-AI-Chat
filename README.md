@@ -6,7 +6,7 @@
 ## 📋 Overview
 
 DocBot AI Chat is a sophisticated document interaction platform that leverages large language models to enable natural language conversations with your documents. Upload various file types, including PDFs, and get instant, intelligent responses by querying the content using everyday language.
-
+ 
 ## ✨ Features
 
 - **Document Upload & Processing**: Upload and process multiple document formats
