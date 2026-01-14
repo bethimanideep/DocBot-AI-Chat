@@ -130,8 +130,10 @@ useEffect(() => {
         };
       }
     }
+    console.log({fileId});
+    
 
-    abortControllerRef.current = new AbortController();
+    // abortControllerRef.current = new AbortController();
     const botMessageId = Date.now() + 1;
     let fullText = "";
     let sourceDocuments: any[] = [];
@@ -143,7 +145,7 @@ useEffect(() => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-        signal: abortControllerRef.current.signal,
+        // signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
+import { io } from "socket.io-client";
 
 export default function CornerStats() {
   const [activeUsers, setActiveUsers] = useState(0);
@@ -126,28 +127,23 @@ export default function CornerStats() {
 
     // Setup socket connection for real-time updates
     const setupSocket = () => {
-      const socket = (window as any).__DOCBOT_SOCKET__;
+      // Connect to socket-service instead of backend
+      const socket = io(process.env.NEXT_PUBLIC_SOCKET_SERVICE_URL || 'http://localhost:3002', {
+        withCredentials: true
+      });
+      
       if (socket) {
         const handleActiveUsers = (data: { count: number }) => {
           setActiveUsers(data.count);
         };
 
-        const handleTotalVisits = (count: number) => {
-          setTotalVisits(count);
-        };
-
-        // Request initial data if socket is available
-        socket.emit('requestActiveCount');
-        socket.emit('requestTotalVisits');
-
         // Set up listeners
         socket.on("activeUsers", handleActiveUsers);
-        socket.on("totalVisits", handleTotalVisits);
 
         // Cleanup
         return () => {
           socket.off("activeUsers", handleActiveUsers);
-          socket.off("totalVisits", handleTotalVisits);
+          socket.disconnect();
         };
       }
     };

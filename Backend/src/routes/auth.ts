@@ -6,78 +6,8 @@ import jwt from "jsonwebtoken";
 import { GoogleDriveFile, User, UserFile } from "../models/schema"; // Import the updated User model
 import { hashPassword, verifyPassword } from "../utils/hash";
 import crypto from "crypto";
-import { Resend } from "resend";
-import { google } from "googleapis";
-import { emailTemplates } from "../utils/emailTemplates";
 
 const router = Router();
-
-// Initialize Resend with API key
-const resend = new Resend(process.env.RESEND_API_KEY);
-const senderEmail = process.env.SENDER_EMAIL || "noreply@resend.dev";
-
-// Google Sign-In (Basic Profile and Email)
-router.get(
-  "/google",
-  passport.authenticate("google-signin", { scope: ["profile", "email"]  ,prompt:"select_account",session: false})
-);
-
-// Google Sign-In Callback
-router.get(
-  "/google/callback",
-  passport.authenticate("google-signin", { failureRedirect: "/",session: false, }),
-  async (req, res) => {
-    try {
-      const userProfile = req.user as any; // Keeping profile type as any
-      const userEmail = userProfile.emails[0].value; // Accessing user's email
-      const username = userProfile.displayName;
-      const GoogleaccessToken = userProfile.GoogleaccessToken; // Access token from Google
-      
-      // Check if the user already exists in MongoDB
-      let user = await User.findOne({ email: userEmail });
-      if (!user) {
-        // If user does not exist, create a new user
-        user = new User({
-          username: username,
-          email: userEmail,
-          authenticationType: "google",
-          verified: true, // Google users are verified by default
-        });
-        await user.save();
-      }
-
-      // Generate JWT token
-      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, {
-        expiresIn: "1h",
-      });
-      res.cookie("username", username, {
-       httpOnly: false, secure: true, sameSite: "none"
-      });
-      res.cookie("userId", user._id.toString(), {
-        httpOnly: false, secure: true, sameSite: "none"
-      });
-      
-      // Set tokens in cookies
-      res.cookie("token", token, {
-       httpOnly: false, secure: true, sameSite: "none"
-      });
-      res.cookie("GoogleaccessToken", GoogleaccessToken, {
-        httpOnly: false, secure: true, sameSite: "none"
-      });
-
-      // Create redirect URL with params
-      const frontendUrl = new URL(String(process.env.FRONTEND_URL));
-      frontendUrl.searchParams.append("username", encodeURIComponent(username));
-      frontendUrl.searchParams.append("userId", user._id.toString());
-
-      // Redirect to your frontend with params
-      res.redirect(frontendUrl.toString());
-    } catch (error) {
-      console.error(error);
-      res.status(500).send("Internal Server Error");
-    }
-  }
-);
 
 // Google Drive Connection (Additional Permissions)
 router.get(
@@ -109,22 +39,51 @@ router.get("/google/drive/callback",passport.authenticate("google-drive", { fail
 
 router.get("/google/drive/files", async (req: any, res: any) => {
   try {
-    const userId = req.user?._id; // Assuming user is authenticated and userId is available
+    // 1. Check if token cookie exists
+    const tokenCookie = req.cookies.token;
     
-    if (!req.cookies.DriveAccessToken) {
+    if (!tokenCookie) {
+      return res.status(401).json({ error: "Unauthorized: Token not provided" });
+    }
+
+    let decoded: any;
+    try {
+      // 2. Verify token
+      decoded = jwt.verify(tokenCookie, process.env.JWT_SECRET!);
+    } catch (err: any) {
+      // Token exists but is invalid / expired
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({ error: "Session expired. Please login again." });
+      }
+
+      if (err.name === "JsonWebTokenError") {
+        return res.status(401).json({ error: "Invalid token. Please login again." });
+      }
+
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // 3. Validate decoded payload
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({ error: "Unauthorized: Invalid token payload" });
+    }
+
+    const userId = decoded.userId;
+
+    const driveAccessToken = req.cookies.DriveAccessToken;
+    if (!driveAccessToken) {
       return res.status(401).json({ error: "Unauthorized: No access token provided" });
     }
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
-
+    const { google } = require("googleapis");
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: req.cookies.DriveAccessToken });
+    oauth2Client.setCredentials({
+      access_token: driveAccessToken,
+    });
 
     const drive = google.drive({ version: "v3", auth: oauth2Client });
-
-    // Fetch PDF and image files from Google Drive (exclude folders and trashed items)
+    
+    // Fetch PDF, images, and Word files (exclude folders & trashed)
     const response = await drive.files.list({
       q: "(mimeType='application/pdf' OR mimeType contains 'image/' OR mimeType contains 'officedocument' OR mimeType = 'application/msword') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
       fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
@@ -134,33 +93,34 @@ router.get("/google/drive/files", async (req: any, res: any) => {
       return res.json({ driveFiles: [] });
     }
 
-    // Get all file IDs from the Google Drive response
+    // Collect all file IDs
     const fileIds = response.data.files.map((file: any) => file.id);
 
-    // Find all synced files from MongoDB that match these file IDs
+    // Find all synced files from MongoDB
     const syncedFiles = await GoogleDriveFile.find({
       userId,
-      fileId: { $in: fileIds }
+      fileId: { $in: fileIds },
     });
 
-    // Create a map of fileId to sync status
-    const syncStatusMap = new Map();
-    syncedFiles.forEach(file => {
+    // Build map of fileId → synced
+    const syncStatusMap = new Map<string, boolean>();
+    syncedFiles.forEach((file: any) => {
       syncStatusMap.set(file.fileId, file.synced);
     });
 
-    // Prepare the response with sync status
+    // Prepare final response
     const driveFiles = response.data.files.map((file: any) => ({
       id: file.id,
       name: file.name,
       webViewLink: file.webViewLink,
       thumbnailLink: file.thumbnailLink,
       fileSize: file.size ? parseInt(file.size) : 0,
-      mimeType: file.mimeType || 'application/pdf',
-      synced: syncStatusMap.get(file.id) || false
+      mimeType: file.mimeType || "application/pdf",
+      synced: syncStatusMap.get(file.id) || false,
     }));
 
     return res.json({ driveFiles });
+    
   } catch (error) {
     console.error("Error fetching files from Google Drive:", error);
     return res.status(500).json({ error: "Failed to fetch Google Drive files" });
@@ -190,27 +150,13 @@ router.post("/login", async (req:any, res:any) => {
         verified: false, // Initially unverified
       });
 
-      // Send OTP (fire and forget - don't block request)
-      (async () => {
-        try {
-          const otp = crypto.randomInt(100000, 999999).toString();
-          const otpExpiresAt = new Date(Date.now() + 10 * 60000);
+      // Generate OTP and store for email service to send
+      const otp = crypto.randomInt(100000, 999999).toString();
+      const otpExpiresAt = new Date(Date.now() + 10 * 60000);
 
-          user.otp = otp;
-          user.otpExpiresAt = otpExpiresAt;
-          await user.save();
-
-          await resend.emails.send({
-            from: senderEmail,
-            to: email,
-            subject: "Your OTP Code - DocBot AI",
-            html: emailTemplates.otp(otp, "DocBot AI"),
-          });
-          console.log(`OTP sent to ${email}`);
-        } catch (error) {
-          console.error("Error sending OTP email:", error);
-        }
-      })();
+      user.otp = otp;
+      user.otpExpiresAt = otpExpiresAt;
+      await user.save();
 
       return res.status(200).json({ message: "OTP sent to your email" });
     }
@@ -221,28 +167,14 @@ router.post("/login", async (req:any, res:any) => {
       return res.status(400).json({ error: "Incorrect password" });
     }
 
-    // If user is not verified, send OTP (fire and forget - don't block request)
+    // If user is not verified, generate OTP for email service to send
     if (!user.verified) {
-      (async () => {
-        try {
-          const otp = crypto.randomInt(100000, 999999).toString();
-          const otpExpiresAt = new Date(Date.now() + 10 * 60000);
+      const otp = crypto.randomInt(100000, 999999).toString();
+      const otpExpiresAt = new Date(Date.now() + 10 * 60000);
 
-          user.otp = otp;
-          user.otpExpiresAt = otpExpiresAt;
-          await user.save();
-
-          await resend.emails.send({
-            from: senderEmail,
-            to: email,
-            subject: "Your OTP Code - DocBot AI",
-            html: emailTemplates.otp(otp, "DocBot AI"),
-          });
-          console.log(`OTP sent to ${email}`);
-        } catch (error) {
-          console.error("Error sending OTP email:", error);
-        }
-      })();
+      user.otp = otp;
+      user.otpExpiresAt = otpExpiresAt;
+      await user.save();
 
       return res.status(200).json({ message: "OTP sent to your email" });
     }
@@ -278,6 +210,60 @@ router.post("/login", async (req:any, res:any) => {
   }
 });
 
+// Store OTP from email service
+router.post("/store-otp", async (req:any, res:any) => {
+  const { email, otp, expiresAt } = req.body;
+
+  if (!email || !otp || !expiresAt) {
+    return res.status(400).json({ error: "Email, OTP, and expiresAt are required" });
+  }
+
+  try {
+    const user = await User.findOne({ email, authenticationType: "email" });
+
+    if (!user) {
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    user.otp = otp;
+    user.otpExpiresAt = new Date(expiresAt);
+    await user.save();
+
+    console.log(`OTP stored for ${email}: ${otp}`);
+    return res.status(200).json({ message: "OTP stored successfully" });
+  } catch (error) {
+    console.error("Error storing OTP:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Store password reset token from email service  
+router.post("/store-reset-token", async (req:any, res:any) => {
+  const { email, token, resetLink } = req.body;
+
+  if (!email || !token) {
+    return res.status(400).json({ error: "Email and token are required" });
+  }
+
+  try {
+    const user = await User.findOne({ email, authenticationType: "email" });
+
+    if (!user) {
+      return res.status(200).json({ message: "If an account exists, token stored" });
+    }
+
+    user.resetToken = token;
+    user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+    await user.save();
+
+    console.log(`Password reset token stored for ${email}: ${token}`);
+    return res.status(200).json({ message: "Reset token stored successfully" });
+  } catch (error) {
+    console.error("Error storing reset token:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Verify OTP
 router.post("/verify-otp", async (req:any, res:any) => {
   const { email, otp } = req.body;
@@ -307,7 +293,7 @@ router.post("/verify-otp", async (req:any, res:any) => {
       await user.save();
 
       // Generate JWT tokens
-      const token = jwt.sign({ email: user._id }, process.env.JWT_SECRET!, {
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, {
         expiresIn: "1h",
       });
       const refreshToken = jwt.sign(
@@ -356,7 +342,7 @@ router.post("/drivelogout", (req:any, res:any) => {
 
 });
 
-// Forgot password - generate token and send reset link (if user exists)
+// Forgot password - generate token for email service to send
 router.post("/forgot-password", async (req:any, res:any) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: "Email is required" });
@@ -369,29 +355,12 @@ router.post("/forgot-password", async (req:any, res:any) => {
       return res.status(200).json({ message: "If an account with that email exists, a reset link has been sent." });
     }
 
-    // Generate secure token
+    // Generate secure token for email service to use
     const token = crypto.randomBytes(32).toString("hex");
     
-    // Send Password Reset Email (fire and forget - don't block request)
-    (async () => {
-      try {
-        const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
-
-        user.resetToken = token;
-        user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
-        await user.save();
-
-        await resend.emails.send({
-          from: senderEmail,
-          to: email,
-          subject: "Reset Your Password - DocBot AI",
-          html: emailTemplates.passwordReset(resetLink, "DocBot AI"),
-        });
-        console.log(`Password reset email sent to ${email}`);
-      } catch (error) {
-        console.error("Error sending password reset email:", error);
-      }
-    })();
+    user.resetToken = token;
+    user.resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+    await user.save();
 
     return res.status(200).json({ message: "If an account with that email exists, a reset link has been sent." });
   } catch (error) {
@@ -426,5 +395,61 @@ router.post("/reset-password", async (req:any, res:any) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+router.get("/files", async (req: any, res: any) => {
+  try {
+    // 1. Check if token cookie exists
+    const token = req.cookies?.token;
+  
+    if (!token) {
+      return res.status(401).json({
+        error: "Unauthorized: Token not provided",
+      });
+    }
+
+    let decoded: any;
+    try {
+      // 2. Verify token
+      decoded = jwt.verify(token, process.env.JWT_SECRET!);
+    } catch (err: any) {
+      // Token exists but is invalid / expired
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({
+          error: "Session expired. Please login again.",
+        });
+      }
+
+      if (err.name === "JsonWebTokenError") {
+        return res.status(401).json({
+          error: "Invalid token. Please login again.",
+        });
+      }
+
+      return res.status(401).json({
+        error: "Unauthorized",
+      });
+    }
+
+    // 3. Validate decoded payload
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({
+        error: "Unauthorized: Invalid token payload",
+      });
+    }
+
+    // 4. Fetch files
+    const files = await UserFile.find({ userId: decoded.userId });
+
+    res.json({ files });
+  } catch (error) {
+    console.error("Error in /files:", error);
+    res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+});
+
+
+
 
 export default router;

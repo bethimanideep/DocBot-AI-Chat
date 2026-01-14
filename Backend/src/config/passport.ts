@@ -3,23 +3,6 @@ dotenv.config();
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 
-// For Google Sign-In
-passport.use(
-  'google-signin',
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: `${process.env.BACKEND_URL}/auth/google/callback`, // Full URL
-      scope: ['profile', 'email'],
-    },
-    (accessToken, refreshToken, profile:any, done) => {
-      profile.GoogleaccessToken = accessToken;
-      done(null, profile);
-    }
-  )
-);
-
 // For Google Drive
 passport.use(
   'google-drive',

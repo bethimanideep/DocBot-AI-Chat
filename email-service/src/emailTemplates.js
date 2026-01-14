@@ -1,7 +1,7 @@
 // Email Template Utilities
-export const emailTemplates = {
+const emailTemplates = {
   // OTP Email Template
-  otp: (otp: string, appName: string = "DocBot AI") => `
+  otp: (otp, appName = "DocBot AI") => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -146,7 +146,7 @@ export const emailTemplates = {
   `,
 
   // Password Reset Email Template
-  passwordReset: (resetLink: string, appName: string = "DocBot AI") => `
+  passwordReset: (resetLink, appName = "DocBot AI") => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -298,3 +298,5 @@ export const emailTemplates = {
 </html>
   `,
 };
+
+module.exports = { emailTemplates };

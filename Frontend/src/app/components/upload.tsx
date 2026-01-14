@@ -126,15 +126,18 @@ const Upload = () => {
     dispatch(setIsLoading(true));
     dispatch(setProgress(25));
 
+    
     const files = event.target.files;
-    if (!files || files.length === 0 || !socketId) return;
-
+    
+    if (!files || files.length === 0) return;
+    
     const formData = new FormData();
     Array.from(files).forEach((file) => {
       formData.append("files", file);
     });
-
-    formData.append("socketId", socketId);
+    
+    // formData.append("socketId", socketId);
+    console.log({uploadUrl});
 
 
     try {

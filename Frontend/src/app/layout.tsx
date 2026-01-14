@@ -28,7 +28,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <Toaster />        {/* MUST be first */}
-            <ServerStatus />   {/* Toast fires after Toaster exists */}
+            <ServerStatus />
 
             {children}
             <CornerStats />

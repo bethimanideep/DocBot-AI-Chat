@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { showToast } from "@/lib/toast";
+import { authService } from "@/lib/authService";
 
 export default function ResetPasswordPage() {
   const params = useParams() as { token?: string };
@@ -22,21 +23,12 @@ export default function ResetPasswordPage() {
     }
     setIsLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast("success", "", data.message || "Password reset successful");
-        router.push("/");
-      } else {
-        showToast("error", "", data.error || "Failed to reset password");
-      }
-    } catch (err) {
+      const data = await authService.resetPassword(token!, password);
+      showToast("success", "", data.message || "Password reset successful");
+      router.push("/");
+    } catch (err: any) {
       console.error(err);
-      showToast("error", "", "An error occurred");
+      showToast("error", "", err.message || "An error occurred");
     } finally {
       setIsLoading(false);
     }

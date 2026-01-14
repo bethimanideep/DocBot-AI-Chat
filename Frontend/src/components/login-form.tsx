@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showToast } from "@/lib/toast";
 import { Otp } from "@/app/components/otp";
+import { authService } from "@/lib/authService";
 // Callback to open forgot password modal is passed from parent
 import { useDispatch } from "react-redux"; // Import useSelector
 import { setUploadedFiles, setUserId, setUsername, setCurrentChatingFile } from "@/app/components/reduxtoolkit/socketSlice";
+import { fetchUserFiles } from "@/lib/files";
 // Adjust the import path
 interface LoginFormProps {
   className?: string;
@@ -34,36 +36,34 @@ export function LoginForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: 'include',
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        if (data.message === "OTP sent to your email") {
-          showToast("success", "", data.message + " Please check your spam folder if you don't see it.");
-          setComponent("otp"); // Set component state to 'otp'
-        }else{
-          showToast("success", "", data.message);
-          dispatch(setUsername(data.username));
-          dispatch(setUserId(data.userId));
-          dispatch(setUploadedFiles(data.fileList));
+      const data = await authService.login(email, password);
+      
+      if (data.otpSent) {
+        showToast("success", "", "OTP sent to your email. Please check your spam folder if you don't see it.");
+        setComponent("otp"); // Set component state to 'otp'
+      } else {
+        showToast("success", "", data.message);
+        dispatch(setUsername(data.username));
+        dispatch(setUserId(data.userId));
+        
+        // Fetch files from /files endpoint after successful login
+        const files = await fetchUserFiles();
+        if (files !== null) {
+          dispatch(setUploadedFiles(files as any));
           // If user has uploaded files on server, switch heading to Local Files
-          if (data.fileList && data.fileList.length > 0) {
+          if (files && files.length > 0) {
             dispatch(setCurrentChatingFile("Local Files"));
           }
-          onClose();
+        } else {
+          // If fetch fails, set empty array
+          dispatch(setUploadedFiles([] as any));
         }
-      } else {
-        showToast("error", "", data.error);
+        
+        onClose();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login Error:", error);
-      alert("An error occurred. Please try again.");
+      showToast("error", "", error.message || "An error occurred. Please try again.");
     } finally {
       // Always reset submitting state so buttons are re-enabled on error/completion
       setIsSubmitting(false);

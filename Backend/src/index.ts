@@ -1,35 +1,37 @@
 import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
-import { ChatGroq } from "@langchain/groq";
+import { llm } from "./config/llm";
 import multer from "multer";
 import { TokenTextSplitter } from "@langchain/textsplitters";
 import mongoose from "mongoose";
 import { RetrievalQAChain } from "@langchain/classic/chains";
-import { createClient } from "redis";
-import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
-import { WeaviateStore } from "@langchain/weaviate";
 import cors from "cors";
-import { Server } from "socket.io";
-import http from "http";
-import weaviate from "weaviate-ts-client";
+// import weaviate from "weaviate-ts-client";
 import router from "./routes/auth";
 import passport from "passport";
 import cookieParser from "cookie-parser";
 import { GoogleDriveFile, User, UserFile } from "./models/schema";
 import { google } from "googleapis";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
-import * as cookie from 'cookie';
 import { CallbackManagerForRetrieverRun } from "@langchain/core/callbacks/manager";
 // Endpoint to handle multiple file uploads
 import { PDFParse } from "pdf-parse";
 import Tesseract from "tesseract.js";
 import mammoth from "mammoth";
+import { PineconeStore } from "@langchain/pinecone";
 
-const userRetrievers: any = {};
-const allowedOrigins = process.env.CORS?.split(",");
+import { Pinecone } from '@pinecone-database/pinecone'
+const pinecone = new Pinecone({
+  apiKey: process.env.PINECONE_API_KEY!,
+})
+
+
+const INDEX_NAME = "cwd"
+const DIMENSION = 768
+const METRIC = "cosine"
 
 const app = express();
 app.use(
@@ -45,11 +47,6 @@ app.use(passport.initialize());
 
 
 app.use("/auth", router);
-
-
-
-
-
 
 // Minimal retriever wrapper to satisfy LangChain's BaseRetriever interface
 class FunctionalRetriever extends BaseRetriever {
@@ -72,320 +69,33 @@ class FunctionalRetriever extends BaseRetriever {
   }
 }
 
-// Initialize OpenAI embeddings model
-// const embeddings = new OpenAIEmbeddings({
-//   apiKey: process.env.OPENAI_API_KEY,
-//   model: "text-embedding-3-small",
-// });
-
-
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { TaskType } from "@google/generative-ai";
 
 const embeddings = new GoogleGenerativeAIEmbeddings({
   apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY,
-  model: "gemini-embedding-001", // 768 dimensions
+  model: "text-embedding-004", // Updated to newer model
   taskType: TaskType.RETRIEVAL_DOCUMENT,
   title: "Document title",
 });
 
-
-// The Weaviate SDK has an issue with types
-// const weaviateClient = weaviate.client({
-//   scheme: "http",
-//   host: "localhost:8080",
-// });
-
-const weaviateApiKey = process.env.WEAVIATE_API_KEY;
-if (!weaviateApiKey) {
-  throw new Error("WEAVIATE_API_KEY environment variable is required");
-}
-
-const weaviateClient = weaviate.client({
-  scheme: "https",
-  host: "xnc212pktecl2ed0bohvig.c0.asia-southeast1.gcp.weaviate.cloud",
-  apiKey: new weaviate.ApiKey(weaviateApiKey),
-});
-
-
-
-
-
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: true,
-    credentials: true,
-  },
-});
-
-io.on("connection", async (socket) => {
-  console.log("New client connected");
-
+// Validate embeddings configuration
+const validateEmbeddings = async () => {
   try {
-    // Send the current active count to the newly connected socket immediately
-    const activeNow = io.of("/").sockets.size || io.sockets.sockets.size || 0;
-    socket.emit("activeUsers", { count: activeNow });
+    const testEmbedding = await embeddings.embedQuery("test");
 
-    // Also broadcast to all other clients about new connection
-    io.emit("userConnected", {
-      socketId: socket.id,
-      activeUsers: activeNow
-    });
-
-  } catch (err) {
-    console.error("Failed to emit activeUsers to newly connected socket:", err);
+    return true;
+  } catch (error) {
+    console.error("Embeddings configuration error:", error);
+    return false;
   }
-  socket.on('requestActiveCount', () => {
-    try {
-      const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
-      socket.emit('activeUsers', { count: activeCount });
-    } catch (err) {
-      console.error('Failed to respond to requestActiveCount:', err);
-    }
-  });
-
-  // Handle visits increment
-  socket.on('incrementVisits', () => {
-    try {
-      // Broadcast to all clients to increment their visit count
-      io.emit('visitIncremented');
-    } catch (err) {
-      console.error('Failed to handle visit increment:', err);
-    }
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.log("Client disconnected", socket.id, "reason:", reason);
-    try {
-      // Emit updated active user count when a client disconnects
-      emitActiveUserCount();
-
-      // Broadcast disconnection event
-      const remainingCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
-      io.emit("userDisconnected", {
-        socketId: socket.id,
-        activeUsers: remainingCount
-      });
-
-    } catch (err) {
-      console.error("Failed to emit active user count on disconnect:", err);
-    }
-  });
-
-
-  // Handle room joining first
-  socket.on('joinRoom', (userId: string) => {
-    if (!userId) {
-      console.error('No userId provided for joinRoom');
-      return;
-    }
-    socket.join(userId);
-  });
-
-  // Helper to emit active user count to all connected clients
-  function emitActiveUserCount() {
-    try {
-      // socket map size for number of connected sockets
-      const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
-      io.emit("activeUsers", { count: activeCount });
-    } catch (err) {
-      console.error("Failed to emit active user count:", err);
-    }
-  }
-  // Extract cookies manually from socket handshake headers
-  const cookies: any = socket.handshake.headers.cookie;
-  let DriveAccessToken = null;
-  let userToken = null;
-
-
-  // Check if cookies exist before parsing
-  let parsedCookies: any = {};
-  if (cookies) {
-    try {
-      parsedCookies = cookie.parse(cookies);
-    } catch (error) {
-      console.error('Error parsing cookies:', error);
-    }
-  }
+};
 
 
 
-  if (parsedCookies) {
-    DriveAccessToken = parsedCookies.DriveAccessToken; // Google Drive Access Token
-    userToken = parsedCookies.token; // User JWT Token
-  }
-
-  if (!userToken) {
-    // Inform client but continue to attach disconnect handler so active user count updates correctly
-    socket.emit("initialFileList", {
-      error: "Unauthorized: No access token",
-    });
-    return;
-  }
-
-  try {
-    // Verify JWT token
-    const decoded = jwt.verify(
-      userToken,
-      process.env.JWT_SECRET!
-    ) as JwtPayload;
-
-
-    const userId = decoded.userId;
-
-
-    // Fetch the file list for the logged-in user
-    const fileList = await UserFile.find({ userId });
-
-    // Emit the file list to the frontend upon connection
-    socket.emit("initialFileList", { fileList });
-  } catch (error: any) {
-    console.error("Invalid user token:", error.message);
-    socket.emit("initialFileList", { error: "Invalid or expired token" });
-  }
-
-  // Fetch Drive files if DriveAccessToken exists
-  if (DriveAccessToken) {
-    try {
-      // Verify JWT token again to get userId
-      const decoded = jwt.verify(userToken, process.env.JWT_SECRET!) as JwtPayload;
-      const userId = decoded.userId;
-
-      // Initialize OAuth2 client with access token
-      const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: DriveAccessToken });
-
-      // Create Google Drive API client
-      const drive = google.drive({ version: "v3", auth: oauth2Client });
-
-      // Fetch PDFs and image files (exclude folders and trashed items)
-      const response = await drive.files.list({
-        q: "(mimeType='application/pdf' OR mimeType contains 'image/' OR mimeType contains 'officedocument' OR mimeType = 'application/msword') AND trashed = false AND mimeType != 'application/vnd.google-apps.folder'",
-        fields: "files(id, name, webViewLink, size, mimeType, thumbnailLink)",
-      });
-
-      // Get all file IDs from the response
-      const fileIds = response.data.files?.map(file => file.id) || [];
-
-      // Find all synced files from MongoDB
-      const syncedFiles = await GoogleDriveFile.find({
-        userId,
-        fileId: { $in: fileIds }
-      });
 
 
 
-      // Create a map of fileId to sync status
-      const syncStatusMap = new Map();
-      syncedFiles.forEach(file => {
-        syncStatusMap.set(file.fileId, file.synced);
-      });
-      const sync_idMap = new Map();
-      syncedFiles.forEach(file => {
-        sync_idMap.set(file.fileId, file._id);
-      });
-
-      const driveFiles = response.data.files?.map((file) => ({
-        id: file.id,
-        name: file.name,
-        webViewLink: file.webViewLink,
-        thumbnailLink: file.thumbnailLink,
-        fileSize: file.size ? parseInt(file.size) : 0,
-        mimeType: file.mimeType || "application/pdf",
-        synced: syncStatusMap.get(file.id) || false,
-        _id: sync_idMap.get(file.id) || false,
-      }));
-
-      // Emit the response to the frontend (now named driveFiles)
-      socket.emit("driveFilesResponse", { driveFiles });
-    } catch (error) {
-      console.error("Error fetching Google Drive files:", error);
-      if (error instanceof Error) {
-        socket.emit("driveFilesResponse", {
-          error: "Failed to fetch Google Drive files",
-          details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-      } else {
-        socket.emit("driveFilesResponse", {
-          error: "Failed to fetch Google Drive files",
-          details: "An unknown error occurred"
-        });
-      }
-    }
-  } else {
-    socket.emit("driveFilesResponse", {
-      error: "Google Drive not connected",
-      actionRequired: "connect"
-    });
-  }
-
-  // Handle file sync completion events
-  socket.on('fileSyncComplete', async ({ fileId }) => {
-    try {
-      const decoded = jwt.verify(userToken, process.env.JWT_SECRET!) as JwtPayload;
-      const userId = decoded.userId;
-
-      // Update the file's sync status in MongoDB
-      await GoogleDriveFile.findOneAndUpdate(
-        { userId, fileId },
-        { synced: true, lastSynced: new Date() },
-        { new: true }
-      );
-
-      // Notify all clients about the sync status update
-      io.emit('fileSyncStatusUpdate', { fileId, synced: true });
-    } catch (error) {
-      console.error('Error updating sync status:', error);
-    }
-  });
-
-  // Allow clients to request the current active user count (useful if they attached listeners after connect)
-  socket.on('requestActiveCount', () => {
-    try {
-      const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
-      socket.emit('activeUsers', { count: activeCount });
-    } catch (err) {
-      console.error('Failed to respond to requestActiveCount:', err);
-    }
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.log("Client disconnected", socket.id, "reason:", reason);
-    try {
-      // Emit updated active user count when a client disconnects
-      emitActiveUserCount();
-      console.log("After disconnect, active users:", io.of("/").sockets.size || io.sockets.sockets.size || 0);
-    } catch (err) {
-      console.error("Failed to emit active user count on disconnect:", err);
-    }
-  });
-});
-
-// Helper to emit active user count to all connected clients
-function emitActiveUserCount() {
-  try {
-    // socket map size for number of connected sockets
-    const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
-    io.emit("activeUsers", { count: activeCount });
-  } catch (err) {
-    console.error("Failed to emit active user count:", err);
-  }
-}
-
-// Periodic broadcast to ensure eventual consistency for clients that may have
-// missed a connect/disconnect broadcast (helps with flaky network/tab close cases)
-setInterval(() => {
-  try {
-    emitActiveUserCount();
-  } catch (err) {
-    console.error("Periodic emitActiveUserCount failed:", err);
-  }
-}, 15_000);
-
-io.of("/").adapter.on("created-room", () => {
-  // no-op, but ensures adapter exists in some deployments
-});
 
 
 app.post("/visit", async (req, res) => {
@@ -397,8 +107,8 @@ app.post("/visit", async (req, res) => {
       { upsert: true, new: true }
     ).exec();
 
-    // return new count and active users
-    const activeCount = io.of("/").sockets.size || io.sockets.sockets.size || 0;
+    // return new count and set active users to 0 since Socket.IO is removed
+    const activeCount = 0;
     res.json({ totalVisits: result.totalVisits, activeUsers: activeCount });
   } catch (error) {
     console.error("/visit error:", error);
@@ -422,24 +132,8 @@ app.get("/stats", async (req, res) => {
 // decommissioned. Set GROQ_MODEL in your environment to a supported model name.
 // NOTE: We require an explicit GROQ_MODEL to avoid accidental use of an invalid
 // default that may not exist or be accessible for your account.
-const GROQ_MODEL = process.env.GROQ_MODEL;
-if (!GROQ_MODEL) {
-  throw new Error(
-    "Environment variable GROQ_MODEL is required. Set GROQ_MODEL to a supported Groq model (see your Groq console or docs). Example: GROQ_MODEL=groq-<version>"
-  );
-}
+// Moved to src/config/llm.ts
 
-function createChatGroq(opts?: { streaming?: boolean; callbacks?: any[] }) {
-  return new ChatGroq({
-    apiKey: process.env.GROQ_API_KEY,
-    model: GROQ_MODEL!,
-    temperature: 0,
-    streaming: opts?.streaming,
-    callbacks: opts?.callbacks,
-  });
-}
-
-const llm = createChatGroq();
 
 // Multer setup for handling file uploads in memory
 const storage = multer.memoryStorage();
@@ -455,12 +149,12 @@ async function processPdf(fileBuffer: Buffer): Promise<string[]> {
     const result = await parser.getText();
     text = result.text || "";
   } catch (err) {
-    console.log("pdf-parse getText failed, will try OCR...");
+
   }
 
   // Fallback to OCR if text extraction failed or text is too short
   if (!text || text.trim().length < 20) {
-    console.log("No text layer found - converting to images and performing OCR...");
+
 
     try {
       const screenshot = await parser.getScreenshot({
@@ -495,8 +189,8 @@ async function processPdf(fileBuffer: Buffer): Promise<string[]> {
   // Split text into chunks
   const splitter = new TokenTextSplitter({
     encodingName: "gpt2",
-    chunkSize: 7500,
-    chunkOverlap: 0,
+    chunkSize: 1000, // Reduced from 7500 to stay within Pinecone metadata limit
+    chunkOverlap: 100,
   });
 
   const docs = await splitter.createDocuments([text]);
@@ -517,8 +211,8 @@ async function processImage(fileBuffer: Buffer): Promise<string[]> {
     // Use the same token splitter as PDFs to create chunks
     const splitter = new TokenTextSplitter({
       encodingName: "gpt2",
-      chunkSize: 7500,
-      chunkOverlap: 0,
+      chunkSize: 1000, // Reduced from 7500 to stay within Pinecone metadata limit
+      chunkOverlap: 100,
     });
 
     const docs = await splitter.createDocuments([text]);
@@ -532,6 +226,11 @@ async function processImage(fileBuffer: Buffer): Promise<string[]> {
 // Function to process Word documents (DOCX/DOC) using mammoth
 async function processDocx(fileBuffer: Buffer): Promise<string[]> {
   try {
+    // Validate file size
+    if (fileBuffer.length < 100) {
+      throw new Error("File is too small to be a valid document");
+    }
+
     // mammoth.extractRawText accepts {buffer: <Buffer>}
     const result = await mammoth.extractRawText({ buffer: fileBuffer as any });
     const text = result.value || "";
@@ -542,15 +241,23 @@ async function processDocx(fileBuffer: Buffer): Promise<string[]> {
 
     const splitter = new TokenTextSplitter({
       encodingName: "gpt2",
-      chunkSize: 7500,
-      chunkOverlap: 0,
+      chunkSize: 1000, // Reduced from 7500 to stay within Pinecone metadata limit
+      chunkOverlap: 100,
     });
 
     const docs = await splitter.createDocuments([text]);
     return docs.map((d) => d.pageContent);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error processing docx with mammoth:", err);
-    throw new Error("Failed to extract text from docx");
+
+    // Provide more specific error messages
+    if (err.message && err.message.includes("end of central directory")) {
+      throw new Error("Invalid or corrupted DOCX file. Please ensure the file is a valid Microsoft Word document.");
+    } else if (err.message && err.message.includes("zip file")) {
+      throw new Error("The uploaded file is not a valid DOCX file. DOCX files are ZIP archives - this file appears to be corrupted or in the wrong format.");
+    } else {
+      throw new Error(`Failed to extract text from document: ${err.message || 'Unknown error'}`);
+    }
   }
 }
 
@@ -638,8 +345,8 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
 
           const splitter = new TokenTextSplitter({
             encodingName: 'gpt2',
-            chunkSize: 7500,
-            chunkOverlap: 0,
+            chunkSize: 1000, // Reduced from 7500 to stay within Pinecone metadata limit
+            chunkOverlap: 100,
           });
           const docs = await splitter.createDocuments([text]);
           chunks = docs.map((d) => d.pageContent);
@@ -654,43 +361,60 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
 
     const embeddingsArray = await embeddings.embedDocuments(chunks);
 
-    // Delete existing Weaviate objects
-    const result = await weaviateClient.graphql.get()
-      .withClassName('Cwd')
-      .withFields('_additional { id }')
-      .withWhere({
-        path: ['fileId'],
-        operator: 'Equal',
-        valueString: existingFile._id.toString()
-      })
-      .do();
-
-    const idsToDelete = result.data?.Get?.Cwd?.map((item: any) => item._additional.id) || [];
-    for (const id of idsToDelete) {
-      await weaviateClient.data.deleter()
-        .withClassName('Cwd')
-        .withId(id)
-        .do();
+    // Validate embeddings array
+    if (!embeddingsArray || embeddingsArray.length === 0) {
+      throw new Error(`Failed to generate embeddings for Google Drive file: ${fileMetadata.name}`);
     }
 
-    // Create new batch in Weaviate
-    const batcher = weaviateClient.batch.objectsBatcher();
-    chunks.forEach((chunk, i) => {
-      batcher.withObject({
-        class: "Cwd",
-        properties: {
-          fileId: existingFile._id.toString(),
-          file_name: fileMetadata.name,
-          timestamp: new Date().toISOString(),
-          chunk_index: i,
-          text: chunk,
-          userId,
-          sourceType: "Gdrive",
+    // Check if embeddings have correct dimensions
+    const embeddingDimension = embeddingsArray[0].length;
+    if (embeddingDimension === 0) {
+      throw new Error(`Embeddings have zero dimension for Google Drive file: ${fileMetadata.name}. Check API configuration.`);
+    }
+
+
+
+    // Initialize Pinecone index
+    const index = pinecone.Index(INDEX_NAME);
+
+    // Delete existing Pinecone vectors for this file
+    try {
+      // Query to find vectors with matching metadata
+      const queryResponse = await index.query({
+        vector: embeddingsArray[0], // Use first embedding as query
+        topK: 1000, // Set high enough to get all vectors
+        filter: {
+          fileId: { $eq: existingFile._id.toString() }
         },
-        vector: embeddingsArray[i],
+        includeMetadata: true
       });
-    });
-    await batcher.do();
+
+      // Delete the found vectors
+      if (queryResponse.matches && queryResponse.matches.length > 0) {
+        const idsToDelete = queryResponse.matches.map(match => match.id);
+        await index.deleteMany(idsToDelete);
+      }
+    } catch (deleteError) {
+      console.warn("Error deleting existing vectors, may be first sync:", deleteError);
+    }
+
+    // Prepare vectors for upsert to Pinecone
+    const vectors = chunks.map((chunk, i) => ({
+      id: `${existingFile._id.toString()}-${i}-${Date.now()}`,
+      values: embeddingsArray[i],
+      metadata: {
+        fileId: fileId,
+        file_name: fileMetadata.name || 'unknown', // Ensure not null/undefined
+        timestamp: new Date().toISOString(),
+        chunk_index: i,
+        text: chunk,
+        userId: userId,
+        sourceType: "Gdrive",
+      }
+    }));
+
+    // Upsert vectors to Pinecone
+    await index.upsert(vectors);
 
     // Mark as synced after successful processing
     const updatedFile: any = await GoogleDriveFile.findByIdAndUpdate(
@@ -699,16 +423,18 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
       { new: true }
     );
 
-    io.to(userId).emit('fileSyncStatusUpdate', {
-      _id: updatedFile._id,
-      fileId: fileMetadata.id,
-      synced: true
-    });
 
     res.json({
       success: true,
       message: "File synced successfully",
-      chunksProcessed: chunks.length
+      chunksProcessed: chunks.length,
+      pineconeVectorsUpserted: vectors.length,
+      fileData: {
+        id: fileId,
+        filename: fileMetadata.name,
+        synced: true,
+        chunkCount: chunks.length
+      }
     });
 
   } catch (error: unknown) {
@@ -725,24 +451,58 @@ app.get('/gdrive/sync', async (req: any, res: any) => {
 // Endpoint for uploading PDFs and storing embeddings in Pinecone
 
 app.post("/upload", upload.array("files"), async (req: any, res: any) => {
+
+
   if (!req.files || req.files.length === 0) {
+
     return res.status(400).json({ message: "No files uploaded." });
   }
 
+
+  req.files.forEach((file: any, index: number) => {
+
+  });
+
   try {
     const { userId } = req.query;
+
+
     if (!userId) {
+
       return res.status(400).json({ message: "User ID is required." });
     }
     // Check if user exists in the database
     const userExists = await User.findById(userId);
     if (!userExists) {
+
       return res.status(404).json({ message: "User not found." });
     }
 
-    const batcher = weaviateClient.batch.objectsBatcher();
+
+
+    // Validate embeddings configuration before processing
+
+    const embeddingsValid = await validateEmbeddings();
+    if (!embeddingsValid) {
+
+      return res.status(500).json({
+        message: "Embeddings service configuration error. Please check your API keys."
+      });
+    }
+
+
+
+    // Initialize Pinecone index
+    const index = pinecone.Index(INDEX_NAME);
+
+
+    // Store all vectors to upsert in a single array
+    const allVectors: any[] = [];
+    const processedFiles: any[] = [];
 
     for (let file of req.files) {
+
+
       // Save file metadata to MongoDB
       const fileMetadata = await UserFile.create({
         userId,
@@ -751,101 +511,135 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
         mimeType: file.mimetype,
       });
 
-      const fileId = fileMetadata._id.toString(); // Use MongoDB's _id as fileId
+      const fileId = fileMetadata._id.toString();
 
-      // Allow PDFs, images, and Word documents
+
+      let chunks: string[] = [];
+
+      // Process files based on type
+
       if (file.mimetype === "application/pdf") {
-        // Process PDF and generate embeddings (existing logic - unchanged)
-        const chunks = await processPdf(file.buffer);
 
-        // Embed all chunks in one API call
-        const embeddingsArray = await embeddings.embedDocuments(chunks);
-
-        // Store embeddings in Weaviate with a reference to the MongoDB _id
-        for (let i = 0; i < chunks.length; i++) {
-          batcher.withObject({
-            class: "Cwd", // Use the correct class name from your schema
-            properties: {
-              fileId, // MongoDB _id as reference
-              file_name: file.originalname,
-              timestamp: new Date().toISOString(),
-              chunk_index: i,
-              text: chunks[i],
-              userId,
-              sourceType: "Local Files",
-            },
-            vector: embeddingsArray[i],
-          });
-        }
+        chunks = await processPdf(file.buffer);
       } else if (file.mimetype.startsWith("image/")) {
-        // Process image using OCR and generate embeddings
-        const chunks = await processImage(file.buffer);
 
-        const embeddingsArray = await embeddings.embedDocuments(chunks);
-
-        for (let i = 0; i < chunks.length; i++) {
-          batcher.withObject({
-            class: "Cwd",
-            properties: {
-              fileId,
-              file_name: file.originalname,
-              timestamp: new Date().toISOString(),
-              chunk_index: i,
-              text: chunks[i],
-              userId,
-              sourceType: "Local Files",
-            },
-            vector: embeddingsArray[i],
-          });
-        }
+        chunks = await processImage(file.buffer);
       } else if (
         file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
         file.mimetype === "application/msword" ||
         file.originalname.toLowerCase().endsWith('.docx') ||
         file.originalname.toLowerCase().endsWith('.doc')
       ) {
-        // Process Word document (DOCX/DOC) using mammoth
-        const chunks = await processDocx(file.buffer);
 
-        const embeddingsArray = await embeddings.embedDocuments(chunks);
-
-        for (let i = 0; i < chunks.length; i++) {
-          batcher.withObject({
-            class: "Cwd",
-            properties: {
-              fileId,
-              file_name: file.originalname,
-              timestamp: new Date().toISOString(),
-              chunk_index: i,
-              text: chunks[i],
-              userId,
-              sourceType: "Local Files",
-            },
-            vector: embeddingsArray[i],
-          });
-        }
+        chunks = await processDocx(file.buffer);
       } else {
+
         // Unsupported file type
-        return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs, images and Word documents are allowed.` });
+        return res.status(400).json({
+          message: `Unsupported file type for ${file.originalname}. Only PDFs, images and Word documents are allowed.`
+        });
       }
 
-      // (embeddings already appended to batcher in each branch)
+
+
+      // Generate embeddings for all chunks
+
+      const embeddingsArray = await embeddings.embedDocuments(chunks);
+
+      // Validate embeddings array
+      if (!embeddingsArray || embeddingsArray.length === 0) {
+
+        throw new Error(`Failed to generate embeddings for ${file.originalname}`);
+      }
+
+      // Check if embeddings have correct dimensions
+      const embeddingDimension = embeddingsArray[0].length;
+      if (embeddingDimension === 0) {
+
+        throw new Error(`Embeddings have zero dimension for ${file.originalname}. Check API configuration.`);
+      }
+
+
+
+      // Create Pinecone vectors
+
+      const fileVectors = chunks.map((chunk, i) => ({
+        id: `${fileId}-${i}-${Date.now()}`,
+        values: embeddingsArray[i],
+        metadata: {
+          fileId: fileId,
+          file_name: file.originalname,
+          timestamp: new Date().toISOString(),
+          chunk_index: i,
+          text: chunk,
+          userId: userId,
+          sourceType: "Local Files",
+        }
+      }));
+
+      // Add to our collection of vectors
+      allVectors.push(...fileVectors);
+      processedFiles.push({
+        fileId,
+        filename: file.originalname,
+        chunksProcessed: chunks.length
+      });
+
     }
 
-    // Send batch request to Weaviate (if batcher has objects)
-    if (batcher.objects.length > 0) {
-      await batcher.do();
+    // Upsert all vectors to Pinecone in batches (if there are any)
+    if (allVectors.length > 0) {
+
+      // Batch upsert to handle large numbers of vectors
+      const batchSize = 100;
+      const totalBatches = Math.ceil(allVectors.length / batchSize);
+
+      for (let i = 0; i < allVectors.length; i += batchSize) {
+        const batch = allVectors.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        await index.upsert(batch);
+      }
+
+
+
+      // Update file metadata to mark as processed
+
+      for (const file of processedFiles) {
+        await UserFile.findByIdAndUpdate(
+          file.fileId,
+          { processed: true, synced: true }
+        );
+
+      }
+    } else {
+
     }
+
 
     const fileList = await UserFile.find({ userId });
 
+
+
     res.json({
-      message: "Files processed and embeddings stored successfully in Weaviate",
+      message: "Files processed and embeddings stored successfully in Pinecone",
       fileList,
+      summary: {
+        totalVectorsStored: allVectors.length,
+        filesProcessed: processedFiles.length,
+        processedFiles: processedFiles.map(f => ({
+          filename: f.filename,
+          chunks: f.chunksProcessed
+        }))
+      }
     });
-  } catch (error) {
-    console.error("Error processing files:", error);
-    res.status(500).json({ message: "Error processing files" });
+  } catch (error: any) {
+    console.error("❌ Error processing files:", error);
+    console.error("❌ Error details:", error.message);
+    console.error("❌ Stack trace:", error.stack);
+    res.status(500).json({
+      message: "Error processing files",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -854,9 +648,12 @@ app.delete("/delete", async (req, res) => {
   const className = "Cwd"; // Replace with your actual class name
 
   try {
-    // Step 1: Delete the entire class (index) including its schema and data
-    await weaviateClient.schema.classDeleter().withClassName(className).do();
-    // Send success response
+    // Check if index exists
+    const existing = await pinecone.listIndexes()
+    // Delete the whole index
+    await pinecone.deleteIndex(INDEX_NAME)
+
+
     res.status(200).json({
       message: `Class "${className}" and all its data have been deleted.`,
     });
@@ -867,42 +664,6 @@ app.delete("/delete", async (req, res) => {
     res
       .status(500)
       .json({ error: "An error occurred while deleting the class" });
-  }
-});
-
-// 🚀 Search Endpoint
-app.post("/search", async (req: any, res: any) => {
-  try {
-    const { query } = req.body; // Get user query
-
-    if (!query) {
-      return res.status(400).json({ message: "Query is required" });
-    }
-
-    const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient as any, // Weaviate client instance
-      indexName: "Cwd", // Replace with your Weaviate class name
-      metadataKeys: ["file_name"], // Include metadata fields you want to retrieve
-      textKey: "text", // The property in Weaviate that contains the text
-    });
-
-    const retriever = vectorStore.asRetriever({
-      k: 2, // Set the number of documents to return
-    });
-
-    // Create RetrievalQAChain
-    const chain = RetrievalQAChain.fromLLM(llm, retriever, {
-      returnSourceDocuments: true,
-    });
-
-    // Ask the question and get a response
-    const response = await chain.call({
-      query: query,
-    });
-    res.send(response.text);
-  } catch (error) {
-    console.error("Search error:", error);
-    res.status(500).json({ message: "Error searching Pinecone" });
   }
 });
 
@@ -920,46 +681,40 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient as any,
-      indexName: "Cwd",
-      metadataKeys: ["file_name", "fileId", "timestamp"],
-      textKey: "text",
-    });
+    // Initialize Pinecone index
+    const index = pinecone.Index(INDEX_NAME);
 
-    // Create a custom retriever with filter support
-    const retriever = new FunctionalRetriever(async (query: string) => {
-      const queryEmbedding = await embeddings.embedQuery(query);
-      const whereFilter = {
-        operator: "And" as const,
-        operands: [
-          { path: ["userId"], operator: "Equal" as const, valueText: userId },
-          { path: ["sourceType"], operator: "Equal" as const, valueText: `${sourceType}` },
-        ],
-      };
-      // Query Weaviate directly with filter and vector search
-      const result = await weaviateClient.graphql
-        .get()
-        .withClassName("Cwd")
-        .withFields("text file_name fileId timestamp _additional { id distance }")
-        .withWhere(whereFilter)
-        .withNearVector({ vector: queryEmbedding })
-        .withLimit(3)
-        .do();
+    // Create a custom retriever with Pinecone
+    const retriever = new FunctionalRetriever(async (queryText: string) => {
+      const queryEmbedding = await embeddings.embedQuery(queryText);
 
-      const documents = result.data?.Get?.Cwd || [];
-      return documents.map((doc: any) => new Document({
-        pageContent: doc.text,
+      // Query Pinecone with metadata filter
+      const queryResponse = await index.query({
+        vector: queryEmbedding,
+        topK: 3,
+        includeMetadata: true,
+        filter: {
+          $and: [
+            { userId: { $eq: userId } },
+            { sourceType: { $eq: sourceType } }
+          ]
+        }
+      });
+
+      const documents = queryResponse.matches || [];
+      return documents.map((match: any) => new Document({
+        pageContent: match.metadata?.text || "",
         metadata: {
-          file_name: doc.file_name,
-          fileId: doc.fileId,
-          timestamp: doc.timestamp,
+          file_name: match.metadata?.file_name,
+          fileId: match.metadata?.fileId,
+          timestamp: match.metadata?.timestamp,
+          score: match.score,
         },
       }));
     });
 
-    // Create a streaming LLM instance using the centralized helper
-    const streamingLLM = createChatGroq({
+    // Create a streaming LLM instance
+    const streamingLLM = llm({
       streaming: true,
       callbacks: [
         {
@@ -985,20 +740,25 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
     });
 
     // Process the query
-    const data = await chain.call({
+    await chain.call({
       query: query,
     });
 
   } catch (error) {
     console.error("Search error:", error);
-    res.write(`data: ${JSON.stringify({ error: "Error processing your request" })}\n\n`);
-    res.end();
+
+    if (!res.writableEnded) {
+      res.write(
+        `data: ${JSON.stringify({ error: "Error processing your request" })}\n\n`
+      );
+      res.end();
+    }
   }
 });
 
 app.post("/userfilechat", async (req: any, res: any) => {
   try {
-    const { query, fileId } = req.body;
+    const { query, fileId, userId } = req.body;
 
     if (!query || !fileId) {
       return res.status(400).json({ message: "Query and fileId are required" });
@@ -1008,46 +768,25 @@ app.post("/userfilechat", async (req: any, res: any) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders(); // Important for SSE
+    res.flushHeaders();
 
-    const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
-      client: weaviateClient as any,
-      indexName: "Cwd",
-      metadataKeys: ["file_name", "fileId", "timestamp"],
+    // Initialize Pinecone index
+    const index = pinecone.Index(INDEX_NAME);
+
+    // Create vector store from Pinecone
+    const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+      pineconeIndex: index,
       textKey: "text",
     });
 
-    // Create a custom retriever with filter support
-    const retriever = new FunctionalRetriever(async (query: string) => {
-      const queryEmbedding = await embeddings.embedQuery(query);
-      const whereFilter = {
-        path: ["fileId"],
-        operator: "Equal" as const,
-        valueText: fileId,
-      };
-      // Query Weaviate directly with filter and vector search
-      const result = await weaviateClient.graphql
-        .get()
-        .withClassName("Cwd")
-        .withFields("text file_name fileId timestamp _additional { id distance }")
-        .withWhere(whereFilter)
-        .withNearVector({ vector: queryEmbedding })
-        .withLimit(3)
-        .do();
-
-      const documents = result.data?.Get?.Cwd || [];
-      return documents.map((doc: any) => new Document({
-        pageContent: doc.text,
-        metadata: {
-          file_name: doc.file_name,
-          fileId: doc.fileId,
-          timestamp: doc.timestamp,
-        },
-      }));
+    // Create retriever with fileId filter
+    const retriever = vectorStore.asRetriever({
+      k: 2,
+      filter: { fileId: { $eq: fileId }, userId: { $eq: userId } }
     });
 
-    // Create a streaming LLM instance using the centralized helper
-    const streamingLLM = createChatGroq({
+    // Create a streaming LLM instance
+    const streamingLLM = llm({
       streaming: true,
       callbacks: [
         {
@@ -1073,446 +812,241 @@ app.post("/userfilechat", async (req: any, res: any) => {
     });
 
     // Process the query
-    const data = await chain.call({
+    await chain.call({
       query: query,
     });
 
-
   } catch (error) {
     console.error("Search error:", error);
-    res.write(`data: ${JSON.stringify({ error: "Error processing your request" })}\n\n`);
-    res.end();
+
+    if (!res.writableEnded) {
+      res.write(
+        `data: ${JSON.stringify({ error: "Error processing your request" })}\n\n`
+      );
+      res.end();
+    }
   }
+
 });
 
-const userFileChatMemory: any = {}; // Store user files in memory
-
-app.post("/userfilechatmemory", async (req: any, res: any) => {
-  try {
-    const { userId, fileId, query } = req.body;
-
-    if (!userId || !fileId || !query) {
-      return res
-        .status(400)
-        .json({ error: "userId, fileId, and query are required." });
-    }
-
-    // Initialize user storage if not present
-    if (!userRetrievers[userId]) {
-      userRetrievers[userId] = {};
-    }
-
-    // Check if vector store exists for the given fileId
-    if (!userRetrievers[userId][fileId]) {
-
-      // Fetch embeddings for the specific fileId from Weaviate
-      const result = await weaviateClient.graphql
-        .get()
-        .withClassName("Cwd") // Replace with your actual class name
-        .withFields(
-          `
-          userId
-          file_name
-          fileId
-          chunk_index
-          text
-          _additional { vector }
-        `
-        )
-        .withWhere({
-          path: ["fileId"],
-          operator: "Equal",
-          valueText: fileId,
-        })
-        .do();
-
-      const documents = result.data.Get.Cwd;
-      if (!documents || documents.length === 0) {
-        return res
-          .status(404)
-          .json({ error: "No embeddings found for this fileId." });
-      }
-
-      // Prepare documents with metadata
-      const fileName = documents[0].file_name;
-      const vectors = documents.map((doc: any) => ({
-        pageContent: doc.text,
-        metadata: { file_name: doc.file_name, chunk_index: doc.chunk_index },
-      }));
-      const embeddingsArray = documents.map(
-        (doc: any) => doc._additional.vector
-      );
-
-      // Initialize or update the vector store
-      if (!userRetrievers[userId][fileId]) {
-        userRetrievers[userId][fileId] = {
-          vectorStore: new MemoryVectorStore(embeddings),
-          fileName: fileName, // Store fileName
-          fileId: fileId, // Store fileId
-        };
-      }
-
-      // Add documents to the vector store
-      await userRetrievers[userId][fileId].vectorStore.addVectors(
-        embeddingsArray,
-        vectors
-      );
-    }
-
-    // Retrieve stored vector store
-    const retriever = userRetrievers[userId][fileId].vectorStore.asRetriever({
-      k: 1,
-    });
-
-    const chain = RetrievalQAChain.fromLLM(llm, retriever);
-    const response = await chain.call({ query });
-
-    res.status(200).json({ answer: response.text || "No answer found." });
-  } catch (error) {
-    console.error("Error:", error);
-    res.status(500).json({ message: "Server error." });
-  }
-});
-
-app.post("/searchbyfile", async (req: any, res: any) => {
-  try {
-    const { query, file_name } = req.body;
-
-    if (!query || !file_name) {
-      return res
-        .status(400)
-        .json({ message: "Both query and file_name are required" });
-    }
-
-    if (!userRetrievers[file_name]) {
-
-      // Query Weaviate with metadata filter
-      const response = await weaviateClient.graphql
-        .get()
-        .withClassName("Cwd") // Replace with your actual Weaviate class name
-        .withFields("text file_name _additional { vector }")
-        .withWhere({
-          path: ["file_name"],
-          operator: "Equal",
-          valueText: file_name,
-        })
-        .withLimit(10000)
-        .do();
-
-      const queryResponse = response.data.Get?.Cwd || [];
-
-      if (queryResponse.length === 0) {
-        return res.status(500).json({
-          message: "Files are processing, wait sometime and try again",
-        });
-      }
-
-      // Initialize the vector store
-      let vectorStore = new MemoryVectorStore(embeddings);
-
-      // Store retrieved data into MemoryVectorStore
-      await Promise.all(
-        queryResponse.map(async (doc: any) => {
-          if (doc._additional?.vector && doc.text) {
-            await vectorStore.addVectors(
-              [doc._additional.vector],
-              [
-                new Document({
-                  pageContent: String(doc.text),
-                  metadata: { file_name: doc.file_name },
-                }),
-              ]
-            );
-          }
-        })
-      );
-
-      userRetrievers[file_name] = vectorStore;
-    }
-
-    // Create a chain
-    const chain = RetrievalQAChain.fromLLM(
-      llm,
-      userRetrievers[file_name].asRetriever({ k: 2 }),
-      { returnSourceDocuments: true }
-    );
-
-    // Query the chain
-    const responseData = await chain.call({ query });
-
-    res.send(responseData.text);
-  } catch (error) {
-    console.error("Search error:", error);
-    res
-      .status(500)
-      .json({ message: "Error searching Weaviate for the specific file" });
-  }
-});
 
 app.get("/createIndex", async (req: any, res: any) => {
   try {
-    const existingClasses = await weaviateClient.schema.getter().do();
+    const existing = await pinecone.listIndexes()
 
-    // Check if the "cwd" class already exists
-    const cwdClassExists = existingClasses.classes?.some(
-      (cls) => cls.class === "cwd"
-    );
+    const indexExists = existing.indexes?.some(
+      (idx) => idx.name === INDEX_NAME
+    )
 
-    if (!cwdClassExists) {
-      // Create the "cwd" class with the updated schema
-      await weaviateClient.schema
-        .classCreator()
-        .withClass({
-          class: "Cwd",
-          description: "Stores extracted text chunks from PDFs with embeddings",
-          vectorizer: "none", // Since we use precomputed embeddings
-          vectorIndexType: "hnsw",
-          properties: [
-            { name: "sourceType", dataType: ["string"] },
-            { name: "userId", dataType: ["string"] },
-            { name: "fileId", dataType: ["string"] }, // Add fileId to link with MongoDB
-            { name: "file_name", dataType: ["string"] },
-            { name: "timestamp", dataType: ["date"] },
-            { name: "chunk_index", dataType: ["int"] },
-            { name: "text", dataType: ["text"] },
-          ],
-        })
-        .do();
-      console.log("✅ Weaviate schema created successfully.");
+    if (!indexExists) {
+      await pinecone.createIndex({
+        name: INDEX_NAME,
+        dimension: DIMENSION,
+        metric: METRIC,
+        spec: {
+          serverless: {
+            cloud: "aws",
+            region: "us-east-1",
+          },
+        },
+      })
+
+      res.status(201).json({
+        message: "Index created successfully",
+        index: INDEX_NAME,
+        dimension: DIMENSION,
+        metric: METRIC,
+      })
+
+
     } else {
-      console.log("⚡ Weaviate schema already exists.");
-    }
 
-    res.send(existingClasses.classes);
+      res.status(201).json({
+        message: "Index already exists",
+        index: INDEX_NAME,
+      })
+    }
   } catch (error) {
-    console.error("Error creating Weaviate schema:", error);
-    res.status(500).json({ message: "Error creating Weaviate schema" });
+    console.error("Error creating Pinecone index:", error)
+    res.status(500).json("Error creating Pinecone index:", error)
+
   }
 });
 
 app.get("/getAllData", async (req: any, res: any) => {
   try {
-    const result = await weaviateClient.graphql
-      .get()
-      .withClassName("Cwd") // Replace with your actual class name
-      .withFields(
-        `
-    sourceType
-    userId
-    file_name 
-    fileId
-    timestamp 
-    chunk_index 
-    text 
-    _additional { vector }
-  `
-      ) // Requesting vectors explicitly
-      .do();
-    res.send(result);
+    const index = pinecone.Index(INDEX_NAME);
+    const result = await index.query({
+      vector: new Array(DIMENSION).fill(0),
+      topK: 1000,                      // max records you want back
+      includeMetadata: true,
+      includeValues: true,             // this returns the vector
+    });
+
+    // Normalize response similar to Weaviate output
+    const formatted = result.matches?.map(match => ({
+      id: match.id,
+      ...match.metadata,
+      vector: match.values,
+      score: match.score,
+    }));
+
+    res.send(formatted);
   } catch (error) {
     console.error("Error retrieving data:", error);
+    res.status(500).send("Failed to retrieve data");
   }
 });
+
 
 app.post(
   "/myuserupload",
   upload.array("files", 10),
   async (req: any, res: any) => {
     try {
-      const { socketId } = req.query;
+      const socketId = req.query.socketId;
       const files = req.files;
 
-      if (!socketId)
-        return res.status(400).json({ message: "Socket ID is required." });
-
-      if (!files || files.length === 0)
+      if (!files || files.length === 0) {
         return res.status(400).json({ message: "No files uploaded." });
+      }
 
-      io.emit("progressbar", 50);
 
-      if (!userRetrievers[socketId]) userRetrievers[socketId] = {};
+
+
+
+      const index = pinecone.Index(INDEX_NAME);
+
+      // ❌ No namespace here
+      const store = await PineconeStore.fromExistingIndex(embeddings, {
+        pineconeIndex: index,
+        textKey: "text",
+      });
 
       for (const file of files) {
-        // Allow PDFs, images, and Word documents
+
+
+        let chunks: string[] = [];
+
         if (file.mimetype === "application/pdf") {
-
-          // Process PDF and get chunks (existing logic)
-          const chunks = await processPdf(file.buffer);
-
-          if (!chunks || chunks.length === 0) {
-            return res.status(400).json({
-              message: `The file ${file.originalname} is empty or unreadable.`,
-            });
-          }
-
-          io.emit("progressbar", 75);
-
-          // ---------------- EMBEDDINGS ----------------
-          const embeddingsArray = await embeddings.embedDocuments(chunks);
-
-          const documents = chunks.map((chunk, index) => ({
-            pageContent: chunk,
-            metadata: { file_name: file.originalname, chunk_index: index },
-          }));
-
-          if (!userRetrievers[socketId][file.originalname]) {
-            userRetrievers[socketId][file.originalname] = {
-              vectorStore: new MemoryVectorStore(embeddings),
-              mimeType: file.mimetype,
-              fileSize: file.size,
-            };
-          }
-
-          await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
-            embeddingsArray,
-            documents
-          );
+          chunks = await processPdf(file.buffer);
         } else if (file.mimetype.startsWith("image/")) {
-          const chunks = await processImage(file.buffer);
-
-          if (!chunks || chunks.length === 0) {
-            return res.status(400).json({
-              message: `The image ${file.originalname} produced no text.`,
-            });
-          }
-
-          io.emit("progressbar", 75);
-
-          const embeddingsArray = await embeddings.embedDocuments(chunks);
-          const documents = chunks.map((chunk, index) => ({
-            pageContent: chunk,
-            metadata: { file_name: file.originalname, chunk_index: index },
-          }));
-
-          if (!userRetrievers[socketId][file.originalname]) {
-            userRetrievers[socketId][file.originalname] = {
-              vectorStore: new MemoryVectorStore(embeddings),
-              mimeType: file.mimetype,
-              fileSize: file.size,
-            };
-          }
-
-          await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
-            embeddingsArray,
-            documents
-          );
+          chunks = await processImage(file.buffer);
         } else if (
           file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
           file.mimetype === "application/msword" ||
-          file.originalname.toLowerCase().endsWith('.docx') ||
-          file.originalname.toLowerCase().endsWith('.doc')
+          file.originalname.toLowerCase().endsWith(".docx") ||
+          file.originalname.toLowerCase().endsWith(".doc")
         ) {
-          const chunks = await processDocx(file.buffer);
-
-          if (!chunks || chunks.length === 0) {
-            return res.status(400).json({
-              message: `The file ${file.originalname} is empty or unreadable.`,
-            });
-          }
-
-          io.emit("progressbar", 75);
-
-          // ---------------- EMBEDDINGS ----------------
-          const embeddingsArray = await embeddings.embedDocuments(chunks);
-
-          const documents = chunks.map((chunk, index) => ({
-            pageContent: chunk,
-            metadata: { file_name: file.originalname, chunk_index: index },
-          }));
-
-          if (!userRetrievers[socketId][file.originalname]) {
-            userRetrievers[socketId][file.originalname] = {
-              vectorStore: new MemoryVectorStore(embeddings),
-              mimeType: file.mimetype,
-              fileSize: file.size,
-            };
-          }
-
-          await userRetrievers[socketId][file.originalname].vectorStore.addVectors(
-            embeddingsArray,
-            documents
-          );
+          chunks = await processDocx(file.buffer);
         } else {
-          return res.status(400).json({ message: `Unsupported file type for ${file.originalname}. Only PDFs, images and Word documents are allowed.` });
+          return res.status(400).json({
+            message: `Unsupported file type for ${file.originalname}`,
+          });
         }
+
+        if (!chunks || chunks.length === 0) {
+          return res.status(400).json({
+            message: `The file ${file.originalname} is empty or unreadable.`,
+          });
+        }
+
+
+        const vectors = await embeddings.embedDocuments(chunks);
+
+        const documents = chunks.map((chunk, i) => ({
+          pageContent: chunk,
+          metadata: {
+            FileId: socketId,
+            sourceType: "upload",
+            file_name: file.originalname,
+            chunk_index: i,
+            mimeType: file.mimetype,
+            fileSize: file.size,
+          },
+        }));
+
+        await store.addVectors(vectors, documents);
+
       }
 
-      io.emit("progressbar", 100);
+      // Alternative: Using similaritySearch if your PineconeStore supports it
+      const filter = { FileId: socketId, sourceType: "upload" };
+      const userDocs = await store.similaritySearch("", 10000, filter); // Empty string to get all
 
-      const userFiles = Object.keys(userRetrievers[socketId]).map(
-        (filename, index) => ({
-          _id: index,
-          filename,
-          mimeType: userRetrievers[socketId][filename].mimeType,
-          fileSize: userRetrievers[socketId][filename].fileSize,
-        })
-      );
+      const fileMap = new Map();
+      userDocs.forEach((doc: any) => {
+        const fileName = doc.metadata.file_name;
+        if (!fileMap.has(fileName)) {
+          fileMap.set(fileName, {
+            filename: fileName,
+            _id: doc.metadata._id,
+            mimeType: doc.metadata.mimeType,
+            fileSize: doc.metadata.fileSize,
+          });
+        }
+      });
+      const fileList = Array.from(fileMap.values());
+      console.log(fileList);
 
       res.status(200).json({
         message: "Files uploaded and processed successfully.",
-        fileList: userFiles,
+        fileList,
       });
-    } catch (error) {
-      console.error("Error processing files:", error);
+    } catch (error: any) {
+      console.error("❌ Error in MyUserUpload:", error);
       res.status(500).json({ message: "Error processing files." });
     }
   }
 );
 
 
+
 app.post("/chat", async (req: any, res: any) => {
   try {
     const { query, file_name, socketId } = req.body;
 
-
-    if (!query || !file_name || !socketId) {
+    if (!query || !file_name) {
       return res
         .status(400)
-        .json({ error: "Query, file_name, and socketId are required." });
-    }
-
-    if (!userRetrievers[socketId]) {
-      return res.status(400).json({ error: "Upload files first." });
-    }
-
-    const userFiles = userRetrievers[socketId];
-
-    if (file_name !== "Local Files" && !userFiles[file_name]) {
-      return res.status(400).json({ error: "File not found." });
-    }
-
-    let retriever;
-
-    if (file_name === "Local Files") {
-
-      const vectorStores = Object.values(userFiles)
-        .map((fileData: any) => fileData.vectorStore)
-        .filter((store) => store);
-
-      if (vectorStores.length === 0) {
-        return res.status(400).json({ error: "No stored vector files found." });
-      }
-
-      retriever = new FunctionalRetriever(async (query: string) => {
-        const results = await Promise.all(
-          vectorStores.map((store: any) =>
-            store.asRetriever({ k: 1 }).invoke(query)
-          )
-        );
-        return results.flat();
-      });
-    } else {
-      retriever = userFiles[file_name].vectorStore.asRetriever({ k: 1 });
+        .json({ error: "Query and file_name are required." });
     }
 
     // SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
-    // Streaming LLM with callbacks (centralized helper)
-    const streamingLLM = createChatGroq({
+    const index = pinecone.Index(INDEX_NAME);
+
+    // ❌ No namespace here
+    const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+      pineconeIndex: index,
+      textKey: "text",
+    });
+
+    const retriever =
+      file_name === "Local Files"
+        ? vectorStore.asRetriever({
+          k: 3,
+          filter: {
+            sourceType: { $eq: "upload" },
+            FileId: { $eq: socketId },
+          },
+        })
+        : vectorStore.asRetriever({
+          k: 3,
+          filter: {
+            $and: [
+              { sourceType: { $eq: "upload" } },
+              { file_name: { $eq: file_name } },
+              { FileId: { $eq: socketId } },
+            ],
+          },
+        });
+
+    const streamingLLM = llm({
       streaming: true,
       callbacks: [
         {
@@ -1537,13 +1071,15 @@ app.post("/chat", async (req: any, res: any) => {
     });
 
     await chain.call({ query });
-
   } catch (error) {
-    console.error("Chat error:", error);
-    res.write(`data: ${JSON.stringify({ error: "Server error." })}\n\n`);
-    res.end();
+    console.error("❌ Chat error:", error);
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ error: "Server error." })}\n\n`);
+      res.end();
+    }
   }
 });
+
 
 
 app.get("/", (req, res) => {
@@ -1552,14 +1088,68 @@ app.get("/", (req, res) => {
 });
 
 
+app.get("/files", async (req: any, res: any) => {
+  try {
+    // 1. Check if token cookie exists
+    const token = req.cookies?.token;
+
+    if (!token) {
+      return res.status(401).json({
+        error: "Unauthorized: Token not provided",
+      });
+    }
+
+    let decoded: any;
+    try {
+      // 2. Verify token
+      decoded = jwt.verify(token, process.env.JWT_SECRET!);
+    } catch (err: any) {
+      // Token exists but is invalid / expired
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({
+          error: "Session expired. Please login again.",
+        });
+      }
+
+      if (err.name === "JsonWebTokenError") {
+        return res.status(401).json({
+          error: "Invalid token. Please login again.",
+        });
+      }
+
+      return res.status(401).json({
+        error: "Unauthorized",
+      });
+    }
+
+
+    // 3. Validate decoded payload
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({
+        error: "Unauthorized: Invalid token payload",
+      });
+    }
+
+    // 4. Fetch files
+    const files = await UserFile.find({ userId: decoded.userId });
+
+    res.json({ files });
+  } catch (error) {
+    console.error("Error in /files:", error);
+    res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+});
+
+
+
+
 // Start server
-server.listen(process.env.SERVERPORT ?? 4000, async () => {
+app.listen(process.env.SERVERPORT ?? 4000, async () => {
   try {
     await mongoose.connect(`${process.env.MONGO_URI}`);
-    console.log("Connected to MongoDB");
-    console.log(
-      `Server is running on http://localhost:${process.env.SERVERPORT ?? 4000}`
-    );
+    console.log(`Server is running on http://localhost:${process.env.SERVERPORT ?? 4000}`);
   } catch (error) {
     console.log(error);
     process.exit(1);
@@ -1568,8 +1158,8 @@ server.listen(process.env.SERVERPORT ?? 4000, async () => {
 
 // Properly handle process exit
 process.on("SIGINT", async () => {
-  console.log("Received SIGINT. Cleaning up...");
+
   await mongoose.disconnect(); // Close MongoDB connection
-  console.log("Database connection closed");
+
   process.exit(0);
 });

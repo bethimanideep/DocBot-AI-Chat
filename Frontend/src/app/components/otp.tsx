@@ -7,38 +7,31 @@ import {
 } from "@/components/ui/input-otp";
 import { showToast } from "@/lib/toast";
 import { useDispatch, useSelector } from "react-redux"; // Import useSelector
-import { setUserId, setUsername } from "./reduxtoolkit/socketSlice";
+import { setUserId, setUsername, setUploadedFiles, setCurrentChatingFile } from "./reduxtoolkit/socketSlice";
+import { fetchUserFiles } from "@/lib/files";
+import { authService } from "@/lib/authService";
 
 interface OtpProps {
   email: string; // Email passed from the parent component
 }
 
-export function Otp({ email ,onClose}: any) {
+export function Otp({ email, onClose }: any) {
   const [otp, setOtp] = useState("");
   const dispatch = useDispatch(); // Initialize useDispatch
 
   // Function to handle OTP verification
   const verifyOtp = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/verify-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        showToast("success", "", data.message);
-        dispatch(setUsername(data.username));
-        dispatch(setUserId(data.userId));
-        onClose()
-      } else {
-        showToast("error", "", data.error);
-      }
-    } catch (error) {
+      const data = await authService.verifyOTP(email, otp);
+      
+      showToast("success", "", data.message);
+      dispatch(setUsername(data.username));
+      dispatch(setUserId(data.userId));
+      
+      onClose()
+    } catch (error: any) {
       console.error("OTP Verification Error:", error);
-      showToast("error", "", "An error occurred. Please try again.");
+      showToast("error", "", error.message || "An error occurred. Please try again.");
     }
   };
 

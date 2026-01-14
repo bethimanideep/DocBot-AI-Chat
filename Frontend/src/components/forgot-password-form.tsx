@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { showToast } from "@/lib/toast";
+import { authService } from "@/lib/authService";
 
 interface Props {
   onClose: () => void;
@@ -18,21 +19,12 @@ export default function ForgotPasswordForm({ onClose, onBack }: Props) {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast("success", "", (data.message || "If an account exists, a reset link was sent.") + " Please check your spam folder if you don't see it.");
-        onClose();
-      } else {
-        showToast("error", "", data.error || "Failed to send reset link");
-      }
-    } catch (err) {
+      const data = await authService.forgotPassword(email);
+      showToast("success", "", (data.message || "If an account exists, a reset link was sent.") + " Please check your spam folder if you don't see it.");
+      onClose();
+    } catch (err: any) {
       console.error(err);
-      showToast("error", "", "An error occurred");
+      showToast("error", "", err.message || "An error occurred");
     } finally {
       setLoading(false);
     }

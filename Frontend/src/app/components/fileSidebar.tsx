@@ -43,12 +43,20 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   const touchMovedRef = useRef(false);
   const touchTargetRef = useRef<EventTarget | null>(null);
 
+  // Ref to track latest driveFiles state to avoid race conditions
+  const driveFilesRef = useRef<any[]>([]);
+
   const uploadedFiles = useSelector(
     (state: RootState) => state.socket.uploadedFiles
   );
   const userId = useSelector((state: RootState) => state.socket.userId);
   const driveFiles = useSelector((state: RootState) => state.drive.driveFiles);
   const driveLoading = useSelector((state: RootState) => state.drive.isLoading);
+
+  // Update ref whenever driveFiles changes
+  useEffect(() => {
+    driveFilesRef.current = driveFiles;
+  }, [driveFiles]);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -61,7 +69,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
     e.preventDefault(); // Prevent default on mobile
 
     // Don't sync if already synced
-    const file = driveFiles.find((f: any) => f.id === fileId);
+    const file = driveFilesRef.current.find((f: any) => f.id === fileId);
     if (file && (file as any).synced) return;
 
     // Set loading state for this file
@@ -81,6 +89,34 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       }
 
       const data = await response.json();
+      
+      // Update the file's synced status in Redux state
+      if (data.success && data.fileData) {
+        // Use the ref to get most current state to avoid race conditions
+        const currentDriveFiles = driveFilesRef.current;
+        const fileExists = currentDriveFiles.some((f: any) => f.id === fileId);
+        
+        if (fileExists) {
+          // Create updated array ensuring we don't lose other concurrent updates
+          const updatedDriveFiles = currentDriveFiles.map((f: any) => 
+            f.id === fileId 
+              ? { ...f, synced: true, _id: data.fileData.id}
+              : f
+          );
+          dispatch(setDriveFiles(updatedDriveFiles));
+        }
+        
+        // Set synced file as the current chatting file
+        const originalFile = currentDriveFiles.find((f: any) => f.id === fileId);
+        const syncedFile = { ...originalFile, synced: true, _id: data.fileData.id };
+        if (syncedFile && syncedFile.name) {
+          dispatch(setCurrentChatingFile(syncedFile.name));
+          dispatch(setFileId(data.fileData.id));
+          setSelectedFileId(fileId);
+          onFileClick?.();
+        }
+      }
+      
       showToast("success", "File Synced", "File Sync Successful");
 
     } catch (error: any) {
@@ -115,7 +151,7 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       showToast("success", "", "Connected To Google Drive");
 
       const data = await response.json();
-      dispatch(setDriveFiles(data.pdfFiles));
+      dispatch(setDriveFiles(data.driveFiles || []));
     } catch (error) {
       console.log({ error });
     } finally {
@@ -278,6 +314,12 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   }, []);
 
   const getFileIcon = (mimeType: string) => {
+    console.log(mimeType);
+    
+    if (!mimeType) {
+      return <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />;
+    }
+    
     if (mimeType.includes("image")) {
       return <Image className="w-4 h-4 text-green-500 dark:text-green-400" />;
     } else if (mimeType.includes("spreadsheet")) {
@@ -305,9 +347,11 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
   };
 
   const handleDriveFileClick = (file: any) => {
+    console.log(file);
+    
     if (file.synced) {
       dispatch(setCurrentChatingFile(file.name));
-      dispatch(setFileId(file._id));
+      dispatch(setFileId(file.id));
       setSelectedFileId(file.id);
       onFileClick?.();
     } else {
