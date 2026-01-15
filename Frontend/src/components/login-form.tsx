@@ -45,6 +45,7 @@ export function LoginForm({
         showToast("success", "", data.message);
         dispatch(setUsername(data.username));
         dispatch(setUserId(data.userId));
+        dispatch(setCurrentChatingFile("Local Files"));
         
         // Fetch files from /files endpoint after successful login
         const files = await fetchUserFiles();

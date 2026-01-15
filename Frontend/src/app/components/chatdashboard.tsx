@@ -110,8 +110,9 @@ useEffect(() => {
       url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat`;
       body = {
         query,
-        file_name: currentChatingFile || "Local Files",
+        fileId,
         socketId,
+       file_name: currentChatingFile || "Local Files",
       };
     } else {
       if (currentChatingFile === "Local Files" || currentChatingFile === "Gdrive") {
@@ -130,7 +131,6 @@ useEffect(() => {
         };
       }
     }
-    console.log({fileId});
     
 
     // abortControllerRef.current = new AbortController();

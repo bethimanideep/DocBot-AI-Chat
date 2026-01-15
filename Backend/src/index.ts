@@ -11,7 +11,7 @@ import cors from "cors";
 import router from "./routes/auth";
 import passport from "passport";
 import cookieParser from "cookie-parser";
-import { GoogleDriveFile, User, UserFile } from "./models/schema";
+import { GoogleDriveFile, PublicFiles, User, UserFile } from "./models/schema";
 import { google } from "googleapis";
 import jwt from "jsonwebtoken";
 import { Document } from "@langchain/core/documents";
@@ -176,7 +176,7 @@ async function processPdf(fileBuffer: Buffer): Promise<string[]> {
       }
     } catch (ocrError) {
       console.error("OCR processing failed:", ocrError);
-      throw new Error("Failed to extract text from PDF using OCR");
+      throw new Error("Failed to extract text from PDF using OCR" + ocrError);
     }
   }
 
@@ -219,7 +219,7 @@ async function processImage(fileBuffer: Buffer): Promise<string[]> {
     return docs.map((d) => d.pageContent);
   } catch (err) {
     console.error("Error processing image with OCR:", err);
-    throw new Error("Failed to extract text from image using OCR");
+    throw new Error("Failed to extract text from image using OCR" + err);
   }
 }
 
@@ -249,15 +249,7 @@ async function processDocx(fileBuffer: Buffer): Promise<string[]> {
     return docs.map((d) => d.pageContent);
   } catch (err: any) {
     console.error("Error processing docx with mammoth:", err);
-
-    // Provide more specific error messages
-    if (err.message && err.message.includes("end of central directory")) {
-      throw new Error("Invalid or corrupted DOCX file. Please ensure the file is a valid Microsoft Word document.");
-    } else if (err.message && err.message.includes("zip file")) {
-      throw new Error("The uploaded file is not a valid DOCX file. DOCX files are ZIP archives - this file appears to be corrupted or in the wrong format.");
-    } else {
-      throw new Error(`Failed to extract text from document: ${err.message || 'Unknown error'}`);
-    }
+    throw new Error(`Failed to extract text from document: ${err.message}`);
   }
 }
 
@@ -637,7 +629,7 @@ app.post("/upload", upload.array("files"), async (req: any, res: any) => {
     console.error("❌ Error details:", error.message);
     console.error("❌ Stack trace:", error.stack);
     res.status(500).json({
-      message: "Error processing files",
+      message: error.message,
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -682,36 +674,23 @@ app.post("/userlocalfiles", async (req: any, res: any) => {
     res.flushHeaders();
 
     // Initialize Pinecone index
+
     const index = pinecone.Index(INDEX_NAME);
 
-    // Create a custom retriever with Pinecone
-    const retriever = new FunctionalRetriever(async (queryText: string) => {
-      const queryEmbedding = await embeddings.embedQuery(queryText);
-
-      // Query Pinecone with metadata filter
-      const queryResponse = await index.query({
-        vector: queryEmbedding,
-        topK: 3,
-        includeMetadata: true,
-        filter: {
-          $and: [
-            { userId: { $eq: userId } },
-            { sourceType: { $eq: sourceType } }
-          ]
-        }
-      });
-
-      const documents = queryResponse.matches || [];
-      return documents.map((match: any) => new Document({
-        pageContent: match.metadata?.text || "",
-        metadata: {
-          file_name: match.metadata?.file_name,
-          fileId: match.metadata?.fileId,
-          timestamp: match.metadata?.timestamp,
-          score: match.score,
-        },
-      }));
+    // ❌ No namespace here
+    const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+      pineconeIndex: index,
+      textKey: "text",
     });
+
+
+    const retriever = vectorStore.asRetriever({
+      k: 3,
+      filter: {
+        userId: { $eq: userId },
+        sourceType: { $eq: sourceType },
+      },
+    })
 
     // Create a streaming LLM instance
     const streamingLLM = llm({
@@ -904,27 +883,42 @@ app.post(
   upload.array("files", 10),
   async (req: any, res: any) => {
     try {
-      const socketId = req.query.socketId;
+      const { socketId } = req.query;
       const files = req.files;
+
+      if (!socketId) {
+        return res.status(400).json({ message: "socketId is required." });
+      }
 
       if (!files || files.length === 0) {
         return res.status(400).json({ message: "No files uploaded." });
       }
 
-
-
-
+      // Validate embeddings
+      const embeddingsValid = await validateEmbeddings();
+      if (!embeddingsValid) {
+        return res.status(500).json({
+          message: "Embeddings service configuration error.",
+        });
+      }
 
       const index = pinecone.Index(INDEX_NAME);
 
-      // ❌ No namespace here
-      const store = await PineconeStore.fromExistingIndex(embeddings, {
-        pineconeIndex: index,
-        textKey: "text",
-      });
+      const allVectors: any[] = [];
+      const processedFiles: any[] = [];
 
       for (const file of files) {
+        // Save file metadata into PublicFiles collection
+        const fileMetadata = await PublicFiles.create({
+          socketId,
+          filename: file.originalname,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          processed: false,
+          synced: false,
+        });
 
+        const fileId = fileMetadata._id.toString();
 
         let chunks: string[] = [];
 
@@ -933,7 +927,8 @@ app.post(
         } else if (file.mimetype.startsWith("image/")) {
           chunks = await processImage(file.buffer);
         } else if (
-          file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          file.mimetype ===
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
           file.mimetype === "application/msword" ||
           file.originalname.toLowerCase().endsWith(".docx") ||
           file.originalname.toLowerCase().endsWith(".doc")
@@ -951,62 +946,90 @@ app.post(
           });
         }
 
+        // Generate embeddings
+        const embeddingsArray = await embeddings.embedDocuments(chunks);
 
-        const vectors = await embeddings.embedDocuments(chunks);
+        if (!embeddingsArray || embeddingsArray.length === 0) {
+          throw new Error(`Failed to generate embeddings for ${file.originalname}`);
+        }
 
-        const documents = chunks.map((chunk, i) => ({
-          pageContent: chunk,
+        // Create Pinecone vectors
+        const fileVectors = chunks.map((chunk, i) => ({
+          id: `${fileId}-${i}-${Date.now()}`,
+          values: embeddingsArray[i],
           metadata: {
-            FileId: socketId,
-            sourceType: "upload",
+            fileId,
+            socketId,
             file_name: file.originalname,
             chunk_index: i,
             mimeType: file.mimetype,
             fileSize: file.size,
+            text: chunk,
+            sourceType: "Public Upload",
+            timestamp: new Date().toISOString(),
           },
         }));
 
-        await store.addVectors(vectors, documents);
+        allVectors.push(...fileVectors);
 
+        processedFiles.push({
+          fileId,
+          filename: file.originalname,
+          chunksProcessed: chunks.length,
+        });
       }
 
-      // Alternative: Using similaritySearch if your PineconeStore supports it
-      const filter = { FileId: socketId, sourceType: "upload" };
-      const userDocs = await store.similaritySearch("", 10000, filter); // Empty string to get all
+      // Batch upsert into Pinecone
+      if (allVectors.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < allVectors.length; i += batchSize) {
+          const batch = allVectors.slice(i, i + batchSize);
+          await index.upsert(batch);
+        }
 
-      const fileMap = new Map();
-      userDocs.forEach((doc: any) => {
-        const fileName = doc.metadata.file_name;
-        if (!fileMap.has(fileName)) {
-          fileMap.set(fileName, {
-            filename: fileName,
-            _id: doc.metadata._id,
-            mimeType: doc.metadata.mimeType,
-            fileSize: doc.metadata.fileSize,
+        // Mark files as processed & synced
+        for (const file of processedFiles) {
+          await PublicFiles.findByIdAndUpdate(file.fileId, {
+            processed: true,
+            synced: true,
           });
         }
-      });
-      const fileList = Array.from(fileMap.values());
-      console.log(fileList);
+      }
+
+      // Get all public files for this socketId
+      const fileList = await PublicFiles.find({ socketId });
 
       res.status(200).json({
-        message: "Files uploaded and processed successfully.",
+        message: "Public files uploaded and embeddings stored successfully.",
         fileList,
+        summary: {
+          totalVectorsStored: allVectors.length,
+          filesProcessed: processedFiles.length,
+          processedFiles: processedFiles.map((f) => ({
+            filename: f.filename,
+            chunks: f.chunksProcessed,
+          })),
+        },
       });
     } catch (error: any) {
-      console.error("❌ Error in MyUserUpload:", error);
-      res.status(500).json({ message: "Error processing files." });
+      console.error("❌ Error in MyUserUpload:", error.message);
+      res.status(500).json({
+        message: error.message,
+        error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
     }
   }
 );
 
 
 
+
+
 app.post("/chat", async (req: any, res: any) => {
   try {
-    const { query, file_name, socketId } = req.body;
+    const { query, fileId, socketId, file_name } = req.body;
 
-    if (!query || !file_name) {
+    if (!query || !fileId) {
       return res
         .status(400)
         .json({ error: "Query and file_name are required." });
@@ -1031,17 +1054,17 @@ app.post("/chat", async (req: any, res: any) => {
         ? vectorStore.asRetriever({
           k: 3,
           filter: {
-            sourceType: { $eq: "upload" },
-            FileId: { $eq: socketId },
+            sourceType: { $eq: "Public Upload" },
+            socketId: { $eq: socketId },
           },
         })
         : vectorStore.asRetriever({
           k: 3,
           filter: {
             $and: [
-              { sourceType: { $eq: "upload" } },
-              { file_name: { $eq: file_name } },
-              { FileId: { $eq: socketId } },
+              { sourceType: { $eq: "Public Upload" } },
+              { fileId: { $eq: fileId } },
+              { socketId: { $eq: socketId } },
             ],
           },
         });
@@ -1069,6 +1092,7 @@ app.post("/chat", async (req: any, res: any) => {
     const chain = RetrievalQAChain.fromLLM(streamingLLM, retriever, {
       returnSourceDocuments: true,
     });
+
 
     await chain.call({ query });
   } catch (error) {

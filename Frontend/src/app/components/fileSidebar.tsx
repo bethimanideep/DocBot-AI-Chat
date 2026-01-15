@@ -1,14 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
-  FileText,
-  Image,
-  FileSpreadsheet,
-  Repeat,
-  Loader2,
-  Check,
   Folder,
   HardDrive,
   LogOut,
+  Repeat,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RootState } from "./reduxtoolkit/store";
@@ -20,6 +17,7 @@ import {
   setDriveError,
 } from "./reduxtoolkit/driveSlice";
 import { showToast } from "@/lib/toast";
+import { getFileIcon } from "@/lib/fileIcons";
 
 interface FileData {
   _id: string;
@@ -33,7 +31,7 @@ interface FileSidebarProps {
   onFileClick?: () => void;
 }
 
-export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => {
+export const FileSidebar = ({ onFileClick }: FileSidebarProps) => {
   const dispatch = useDispatch();
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
@@ -312,24 +310,6 @@ export const FileSidebar = ({ onFileSelect, onFileClick }: FileSidebarProps) => 
       document.removeEventListener("touchend", stopDraggingTouch);
     };
   }, []);
-
-  const getFileIcon = (mimeType: string) => {
-    console.log(mimeType);
-    
-    if (!mimeType) {
-      return <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />;
-    }
-    
-    if (mimeType.includes("image")) {
-      return <Image className="w-4 h-4 text-green-500 dark:text-green-400" />;
-    } else if (mimeType.includes("spreadsheet")) {
-      return (
-        <FileSpreadsheet className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-      );
-    } else {
-      return <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />;
-    }
-  };
 
   const formatFileSize = (size: number) => {
     if (size < 1024) return `${size} B`;

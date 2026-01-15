@@ -135,9 +135,6 @@ const Upload = () => {
     Array.from(files).forEach((file) => {
       formData.append("files", file);
     });
-    
-    // formData.append("socketId", socketId);
-    console.log({uploadUrl});
 
 
     try {

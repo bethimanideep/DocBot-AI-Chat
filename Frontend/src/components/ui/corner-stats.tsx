@@ -102,7 +102,6 @@ export default function CornerStats() {
           // Try to record visit first
           const result = await recordVisit();
           setTotalVisits(result.totalVisits);
-          setActiveUsers(result.activeUsers);
           sessionStorage.setItem('visitRecorded', 'true');
         } catch (error) {
           console.error('Failed to record visit, fetching stats instead:', error);

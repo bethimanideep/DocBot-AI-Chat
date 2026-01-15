@@ -35,7 +35,6 @@ io.on('connection', (socket) => {
   
   // Get active users count and emit to all clients
   const activeNow = io.of("/").sockets.size || io.sockets.sockets.size || 0;
-  socket.emit("activeUsers", { count: activeNow });
   io.emit("activeUsers", { count: activeNow });
   
   console.log(`Active users: ${activeNow}`);
