@@ -1029,10 +1029,10 @@ app.post("/chat", async (req: any, res: any) => {
   try {
     const { query, fileId, socketId, file_name } = req.body;
 
-    if (!query || !fileId) {
+    if (!query || !socketId) {
       return res
         .status(400)
-        .json({ error: "Query and file_name are required." });
+        .json({ error: "Query and socketId are required." });
     }
 
     // SSE headers
@@ -1050,7 +1050,7 @@ app.post("/chat", async (req: any, res: any) => {
     });
 
     const retriever =
-      file_name === "Local Files"
+      file_name == "Local Files"
         ? vectorStore.asRetriever({
           k: 3,
           filter: {
